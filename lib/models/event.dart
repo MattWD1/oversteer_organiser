@@ -1,13 +1,13 @@
 class Event {
   final String id;
-  final String competitionId; // which division/season this event belongs to
-  final String name;          // e.g. "Round 1 - Bahrain"
-  final int roundNumber;      // 1, 2, 3...
+  final String divisionId;
+  final String name;
+  final DateTime date;
 
-  Event({
+  const Event({
     required this.id,
-    required this.competitionId,
+    required this.divisionId,
     required this.name,
-    required this.roundNumber,
+    required this.date,
   });
 }

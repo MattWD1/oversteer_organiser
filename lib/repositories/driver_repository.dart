@@ -5,42 +5,16 @@ abstract class DriverRepository {
 }
 
 class InMemoryDriverRepository implements DriverRepository {
-  final List<Driver> _drivers = [
-    Driver(
-      id: 'drv1',
-      displayName: 'L. Hamilton',
-      carNumber: 44,
-      nationalityCode: 'GBR',
-    ),
-    Driver(
-      id: 'drv2',
-      displayName: 'M. Verstappen',
-      carNumber: 1,
-      nationalityCode: 'NED',
-    ),
-    Driver(
-      id: 'drv3',
-      displayName: 'C. Leclerc',
-      carNumber: 16,
-      nationalityCode: 'MON',
-    ),
-    Driver(
-      id: 'drv4',
-      displayName: 'G. Russell',
-      carNumber: 63,
-      nationalityCode: 'GBR',
-    ),
-    Driver(
-      id: 'drv5',
-      displayName: 'L. Norris',
-      carNumber: 4,
-      nationalityCode: 'GBR',
-    ),
+  final List<Driver> _drivers = const [
+    Driver(id: 'drv1', name: 'Lewis Hamilton'),
+    Driver(id: 'drv2', name: 'Max Verstappen'),
+    Driver(id: 'drv3', name: 'Charles Leclerc'),
+    Driver(id: 'drv4', name: 'Lando Norris'),
   ];
 
   @override
   Future<List<Driver>> getDriversForEvent(String eventId) async {
-    // For now, ignore eventId and return the same dummy grid.
+    // In a real app, this would filter by eventId.
     await Future.delayed(const Duration(milliseconds: 200));
     return _drivers;
   }

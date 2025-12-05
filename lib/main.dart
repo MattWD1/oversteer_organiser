@@ -1,24 +1,49 @@
 import 'package:flutter/material.dart';
+
 import 'screens/leagues_page.dart';
 import 'repositories/league_repository.dart';
 import 'repositories/competition_repository.dart';
 import 'repositories/event_repository.dart';
 import 'repositories/driver_repository.dart';
+import 'repositories/session_result_repository.dart';
 
 void main() {
-  runApp(const OversteerApp());
+  // Create repositories once
+  final leagueRepository = InMemoryLeagueRepository();
+  final competitionRepository = InMemoryCompetitionRepository();
+  final eventRepository = InMemoryEventRepository();
+  final driverRepository = InMemoryDriverRepository();
+  final sessionResultRepository = SessionResultRepository();
+
+  runApp(
+    OversteerApp(
+      leagueRepository: leagueRepository,
+      competitionRepository: competitionRepository,
+      eventRepository: eventRepository,
+      driverRepository: driverRepository,
+      sessionResultRepository: sessionResultRepository,
+    ),
+  );
 }
 
 class OversteerApp extends StatelessWidget {
-  const OversteerApp({super.key});
+  final LeagueRepository leagueRepository;
+  final CompetitionRepository competitionRepository;
+  final EventRepository eventRepository;
+  final DriverRepository driverRepository;
+  final SessionResultRepository sessionResultRepository;
+
+  const OversteerApp({
+    super.key,
+    required this.leagueRepository,
+    required this.competitionRepository,
+    required this.eventRepository,
+    required this.driverRepository,
+    required this.sessionResultRepository,
+  });
 
   @override
   Widget build(BuildContext context) {
-    final leagueRepository = InMemoryLeagueRepository();
-    final competitionRepository = InMemoryCompetitionRepository();
-    final eventRepository = InMemoryEventRepository();
-    final driverRepository = InMemoryDriverRepository();
-
     return MaterialApp(
       title: 'Oversteer Organiser',
       debugShowCheckedModeBanner: false,
@@ -31,6 +56,7 @@ class OversteerApp extends StatelessWidget {
         competitionRepository: competitionRepository,
         eventRepository: eventRepository,
         driverRepository: driverRepository,
+        sessionResultRepository: sessionResultRepository,
       ),
     );
   }

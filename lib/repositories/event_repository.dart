@@ -1,40 +1,40 @@
 import '../models/event.dart';
 
 abstract class EventRepository {
-  Future<List<Event>> getEventsForCompetition(String competitionId);
+  Future<List<Event>> getEventsForDivision(String divisionId);
 }
 
 class InMemoryEventRepository implements EventRepository {
   final List<Event> _events = [
     Event(
-      id: 'ev1',
-      competitionId: 'comp1',
-      name: 'Round 1 - Bahrain',
-      roundNumber: 1,
+      id: 'event1',
+      divisionId: 'div1',
+      name: 'Bahrain GP',
+      date: DateTime(2025, 3, 10),
     ),
     Event(
-      id: 'ev2',
-      competitionId: 'comp1',
-      name: 'Round 2 - Jeddah',
-      roundNumber: 2,
+      id: 'event2',
+      divisionId: 'div1',
+      name: 'Jeddah GP',
+      date: DateTime(2025, 3, 24),
     ),
     Event(
-      id: 'ev3',
-      competitionId: 'comp2',
-      name: 'Round 1 - Silverstone',
-      roundNumber: 1,
+      id: 'event3',
+      divisionId: 'div2',
+      name: 'Monza GP',
+      date: DateTime(2025, 4, 7),
     ),
     Event(
-      id: 'ev4',
-      competitionId: 'comp3',
-      name: 'Round 1 - Monza',
-      roundNumber: 1,
+      id: 'event4',
+      divisionId: 'div3',
+      name: 'Spa GP',
+      date: DateTime(2025, 5, 12),
     ),
   ];
 
   @override
-  Future<List<Event>> getEventsForCompetition(String competitionId) async {
-    await Future.delayed(const Duration(milliseconds: 200)); // fake delay
-    return _events.where((e) => e.competitionId == competitionId).toList();
+  Future<List<Event>> getEventsForDivision(String divisionId) async {
+    await Future.delayed(const Duration(milliseconds: 200));
+    return _events.where((e) => e.divisionId == divisionId).toList();
   }
 }

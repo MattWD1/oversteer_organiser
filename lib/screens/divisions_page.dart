@@ -1,23 +1,26 @@
 import 'package:flutter/material.dart';
 
 import '../models/league.dart';
-import '../repositories/league_repository.dart';
+import '../models/competition.dart';
+import '../models/division.dart';
 import '../repositories/competition_repository.dart';
 import '../repositories/event_repository.dart';
 import '../repositories/driver_repository.dart';
 import '../repositories/session_result_repository.dart';
-import 'competitions_page.dart';
+import 'events_page.dart';
 
-class LeaguesPage extends StatefulWidget {
-  final LeagueRepository repository;
+class DivisionsPage extends StatefulWidget {
+  final League league;
+  final Competition competition;
   final CompetitionRepository competitionRepository;
   final EventRepository eventRepository;
   final DriverRepository driverRepository;
   final SessionResultRepository sessionResultRepository;
 
-  const LeaguesPage({
+  const DivisionsPage({
     super.key,
-    required this.repository,
+    required this.league,
+    required this.competition,
     required this.competitionRepository,
     required this.eventRepository,
     required this.driverRepository,
@@ -25,26 +28,27 @@ class LeaguesPage extends StatefulWidget {
   });
 
   @override
-  State<LeaguesPage> createState() => _LeaguesPageState();
+  State<DivisionsPage> createState() => _DivisionsPageState();
 }
 
-class _LeaguesPageState extends State<LeaguesPage> {
-  late Future<List<League>> _futureLeagues;
+class _DivisionsPageState extends State<DivisionsPage> {
+  late Future<List<Division>> _futureDivisions;
 
   @override
   void initState() {
     super.initState();
-    _futureLeagues = widget.repository.getLeaguesForCurrentUser();
+    _futureDivisions = widget.competitionRepository
+        .getDivisionsForCompetition(widget.competition.id);
   }
 
   @override
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
-        title: const Text('My Leagues'),
+        title: Text('Divisions – ${widget.competition.name}'),
       ),
-      body: FutureBuilder<List<League>>(
-        future: _futureLeagues,
+      body: FutureBuilder<List<Division>>(
+        future: _futureDivisions,
         builder: (context, snapshot) {
           if (snapshot.connectionState == ConnectionState.waiting) {
             return const Center(
@@ -54,33 +58,33 @@ class _LeaguesPageState extends State<LeaguesPage> {
 
           if (snapshot.hasError) {
             return Center(
-              child: Text('Error loading leagues: ${snapshot.error}'),
+              child: Text('Error loading divisions: ${snapshot.error}'),
             );
           }
 
-          final leagues = snapshot.data ?? [];
+          final divisions = snapshot.data ?? [];
 
-          if (leagues.isEmpty) {
+          if (divisions.isEmpty) {
             return const Center(
-              child: Text('No leagues yet.'),
+              child: Text('No divisions for this competition.'),
             );
           }
 
           return ListView.builder(
-            itemCount: leagues.length,
+            itemCount: divisions.length,
             itemBuilder: (context, index) {
-              final league = leagues[index];
+              final division = divisions[index];
 
               return ListTile(
-                title: Text(league.name),
-                subtitle: Text('Organiser: ${league.organiserName}'),
+                title: Text(division.name),
                 trailing: const Icon(Icons.chevron_right),
                 onTap: () {
                   Navigator.of(context).push(
                     MaterialPageRoute(
-                      builder: (_) => CompetitionsPage(
-                        league: league,
-                        competitionRepository: widget.competitionRepository,
+                      builder: (_) => EventsPage(
+                        league: widget.league,
+                        competition: widget.competition,
+                        division: division,
                         eventRepository: widget.eventRepository,
                         driverRepository: widget.driverRepository,
                         sessionResultRepository:

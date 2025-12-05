@@ -1,16 +1,19 @@
 import 'package:flutter/material.dart';
+
 import '../models/league.dart';
 import '../models/competition.dart';
 import '../repositories/competition_repository.dart';
 import '../repositories/event_repository.dart';
 import '../repositories/driver_repository.dart';
-import 'division_page.dart';
+import '../repositories/session_result_repository.dart';
+import 'divisions_page.dart';
 
 class CompetitionsPage extends StatefulWidget {
   final League league;
   final CompetitionRepository competitionRepository;
   final EventRepository eventRepository;
   final DriverRepository driverRepository;
+  final SessionResultRepository sessionResultRepository;
 
   const CompetitionsPage({
     super.key,
@@ -18,6 +21,7 @@ class CompetitionsPage extends StatefulWidget {
     required this.competitionRepository,
     required this.eventRepository,
     required this.driverRepository,
+    required this.sessionResultRepository,
   });
 
   @override
@@ -30,21 +34,23 @@ class _CompetitionsPageState extends State<CompetitionsPage> {
   @override
   void initState() {
     super.initState();
-    _futureCompetitions =
-        widget.competitionRepository.getCompetitionsForLeague(widget.league.id);
+    _futureCompetitions = widget.competitionRepository
+        .getCompetitionsForLeague(widget.league.id);
   }
 
   @override
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
-        title: Text(widget.league.name),
+        title: Text('Competitions – ${widget.league.name}'),
       ),
       body: FutureBuilder<List<Competition>>(
         future: _futureCompetitions,
         builder: (context, snapshot) {
           if (snapshot.connectionState == ConnectionState.waiting) {
-            return const Center(child: CircularProgressIndicator());
+            return const Center(
+              child: CircularProgressIndicator(),
+            );
           }
 
           if (snapshot.hasError) {
@@ -54,28 +60,33 @@ class _CompetitionsPageState extends State<CompetitionsPage> {
           }
 
           final competitions = snapshot.data ?? [];
+
           if (competitions.isEmpty) {
             return const Center(
-              child: Text('No competitions for this league yet.'),
+              child: Text('No competitions found for this league.'),
             );
           }
 
           return ListView.builder(
             itemCount: competitions.length,
             itemBuilder: (context, index) {
-              final comp = competitions[index];
+              final competition = competitions[index];
 
               return ListTile(
-                title: Text(comp.name),
-                subtitle: Text(comp.seasonLabel),
-                trailing: const Icon(Icons.sports_motorsports),
+                title: Text(competition.name),
+                subtitle: Text('Season: ${competition.seasonName ?? 'N/A'}'),
+                trailing: const Icon(Icons.chevron_right),
                 onTap: () {
                   Navigator.of(context).push(
                     MaterialPageRoute(
-                      builder: (_) => DivisionPage(
-                        competition: comp,
+                      builder: (_) => DivisionsPage(
+                        league: widget.league,
+                        competition: competition,
+                        competitionRepository: widget.competitionRepository,
                         eventRepository: widget.eventRepository,
                         driverRepository: widget.driverRepository,
+                        sessionResultRepository:
+                            widget.sessionResultRepository,
                       ),
                     ),
                   );

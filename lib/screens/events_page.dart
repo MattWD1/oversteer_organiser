@@ -1,47 +1,59 @@
 import 'package:flutter/material.dart';
+
+import '../models/league.dart';
 import '../models/competition.dart';
+import '../models/division.dart';
 import '../models/event.dart';
 import '../repositories/event_repository.dart';
 import '../repositories/driver_repository.dart';
+import '../repositories/session_result_repository.dart';
 import 'session_page.dart';
 
-class DivisionPage extends StatefulWidget {
+class EventsPage extends StatefulWidget {
+  final League league;
   final Competition competition;
+  final Division division;
   final EventRepository eventRepository;
   final DriverRepository driverRepository;
+  final SessionResultRepository sessionResultRepository;
 
-  const DivisionPage({
+  const EventsPage({
     super.key,
+    required this.league,
     required this.competition,
+    required this.division,
     required this.eventRepository,
     required this.driverRepository,
+    required this.sessionResultRepository,
   });
 
   @override
-  State<DivisionPage> createState() => _DivisionPageState();
+  State<EventsPage> createState() => _EventsPageState();
 }
 
-class _DivisionPageState extends State<DivisionPage> {
+class _EventsPageState extends State<EventsPage> {
   late Future<List<Event>> _futureEvents;
 
   @override
   void initState() {
     super.initState();
     _futureEvents =
-        widget.eventRepository.getEventsForCompetition(widget.competition.id);
+        widget.eventRepository.getEventsForDivision(widget.division.id);
   }
 
   @override
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
-        title: Text(widget.competition.name),
+        title: Text('Events – ${widget.division.name}'),
       ),
       body: FutureBuilder<List<Event>>(
         future: _futureEvents,
         builder: (context, snapshot) {
           if (snapshot.connectionState == ConnectionState.waiting) {
-            return const Center(child: CircularProgressIndicator());
+            return const Center(
+              child: CircularProgressIndicator(),
+            );
           }
 
           if (snapshot.hasError) {
@@ -51,9 +63,10 @@ class _DivisionPageState extends State<DivisionPage> {
           }
 
           final events = snapshot.data ?? [];
+
           if (events.isEmpty) {
             return const Center(
-              child: Text('No events for this competition yet.'),
+              child: Text('No events for this division.'),
             );
           }
 
@@ -64,14 +77,18 @@ class _DivisionPageState extends State<DivisionPage> {
 
               return ListTile(
                 title: Text(event.name),
-                subtitle: Text('Round ${event.roundNumber}'),
-                trailing: const Icon(Icons.flag),
+                subtitle: Text(
+                  'Date: ${event.date.day}/${event.date.month}/${event.date.year}',
+                ),
+                trailing: const Icon(Icons.chevron_right),
                 onTap: () {
                   Navigator.of(context).push(
                     MaterialPageRoute(
                       builder: (_) => SessionPage(
                         event: event,
                         driverRepository: widget.driverRepository,
+                        sessionResultRepository:
+                            widget.sessionResultRepository,
                       ),
                     ),
                   );

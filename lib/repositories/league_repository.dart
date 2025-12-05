@@ -5,25 +5,15 @@ abstract class LeagueRepository {
 }
 
 class InMemoryLeagueRepository implements LeagueRepository {
-  final List<League> _leagues = [
-    League(
-      id: 'league1',
-      name: 'Monday Night F1',
-      organiserName: 'Matt',
-      code: 'MON123',
-    ),
-    League(
-      id: 'league2',
-      name: 'EU Tier 1',
-      organiserName: 'SimRacing Hub',
-      code: 'EUT1',
-    ),
+  final List<League> _leagues = const [
+    League(id: 'league1', name: 'F1 Sunday League', organiserName: 'Matt'),
+    League(id: 'league2', name: 'Midweek Sprint League', organiserName: 'Alex'),
   ];
 
   @override
   Future<List<League>> getLeaguesForCurrentUser() async {
-    // later: filter by actual user; for now just return everything
-    await Future.delayed(const Duration(milliseconds: 200)); // tiny fake delay
+    // In a real app this would filter by current user.
+    await Future.delayed(const Duration(milliseconds: 200));
     return _leagues;
   }
 }
