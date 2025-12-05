@@ -4,18 +4,21 @@ import '../models/league.dart';
 import '../repositories/league_repository.dart';
 import '../repositories/competition_repository.dart';
 import '../repositories/event_repository.dart';
+import '../repositories/driver_repository.dart';
 import 'competitions_page.dart';
 
 class LeaguesPage extends StatefulWidget {
   final LeagueRepository repository;
   final CompetitionRepository competitionRepository;
   final EventRepository eventRepository;
+  final DriverRepository driverRepository;
 
   const LeaguesPage({
     super.key,
     required this.repository,
     required this.competitionRepository,
     required this.eventRepository,
+    required this.driverRepository,
   });
 
   @override
@@ -76,6 +79,7 @@ class _LeaguesPageState extends State<LeaguesPage> {
                         league: league,
                         competitionRepository: widget.competitionRepository,
                         eventRepository: widget.eventRepository,
+                        driverRepository: widget.driverRepository,
                       ),
                     ),
                   );

@@ -1,12 +1,16 @@
 import 'package:flutter/material.dart';
 import '../models/event.dart';
+import '../models/driver.dart';
+import '../repositories/driver_repository.dart';
 
 class SessionPage extends StatefulWidget {
   final Event event;
+  final DriverRepository driverRepository;
 
   const SessionPage({
     super.key,
     required this.event,
+    required this.driverRepository,
   });
 
   @override
@@ -14,19 +18,44 @@ class SessionPage extends StatefulWidget {
 }
 
 class _SessionPageState extends State<SessionPage> {
-  // Dummy drivers for now – later this will come from your DB / repositories
-  final List<_DriverResult> _results = [
-    _DriverResult(driverName: 'Driver 1'),
-    _DriverResult(driverName: 'Driver 2'),
-    _DriverResult(driverName: 'Driver 3'),
-    _DriverResult(driverName: 'Driver 4'),
-    _DriverResult(driverName: 'Driver 5'),
-  ];
-
+  bool _loading = true;
+  String? _loadError;
+  final List<_DriverResult> _results = [];
   String? _validationMessage;
 
+  @override
+  void initState() {
+    super.initState();
+    _loadDrivers();
+  }
+
+  Future<void> _loadDrivers() async {
+    try {
+      final List<Driver> drivers =
+          await widget.driverRepository.getDriversForEvent(widget.event.id);
+
+      setState(() {
+        _results.clear();
+        _results.addAll(
+          drivers.map(
+            (d) => _DriverResult(
+              driverId: d.id,
+              driverName: d.displayName,
+            ),
+          ),
+        );
+        _loading = false;
+        _loadError = null;
+      });
+    } catch (e) {
+      setState(() {
+        _loading = false;
+        _loadError = e.toString();
+      });
+    }
+  }
+
   void _saveResults() {
-    // 1) Check all finish positions filled
     final missing = _results.where((r) => r.finishPosition == null).toList();
     if (missing.isNotEmpty) {
       setState(() {
@@ -36,7 +65,6 @@ class _SessionPageState extends State<SessionPage> {
       return;
     }
 
-    // 2) Check finish positions are unique
     final positions = _results.map((r) => r.finishPosition!).toList();
     final uniquePositions = positions.toSet();
     if (uniquePositions.length != positions.length) {
@@ -47,16 +75,14 @@ class _SessionPageState extends State<SessionPage> {
       return;
     }
 
-    // Passed basic checks
     setState(() {
       _validationMessage = null;
     });
 
-    // For now just print to console + snackbar
     for (final r in _results) {
       // ignore: avoid_print
       print(
-        '${r.driverName}: grid=${r.gridPosition}, finish=${r.finishPosition}',
+        '${r.driverName} (id=${r.driverId}): grid=${r.gridPosition}, finish=${r.finishPosition}',
       );
     }
 
@@ -69,11 +95,16 @@ class _SessionPageState extends State<SessionPage> {
 
   @override
   Widget build(BuildContext context) {
-    return Scaffold(
-      appBar: AppBar(
-        title: Text(widget.event.name),
-      ),
-      body: Column(
+    Widget body;
+
+    if (_loading) {
+      body = const Center(child: CircularProgressIndicator());
+    } else if (_loadError != null) {
+      body = Center(child: Text('Error loading drivers: $_loadError'));
+    } else if (_results.isEmpty) {
+      body = const Center(child: Text('No drivers found for this session.'));
+    } else {
+      body = Column(
         children: [
           Padding(
             padding: const EdgeInsets.all(12.0),
@@ -150,17 +181,26 @@ class _SessionPageState extends State<SessionPage> {
             ),
           ),
         ],
+      );
+    }
+
+    return Scaffold(
+      appBar: AppBar(
+        title: Text(widget.event.name),
       ),
+      body: body,
     );
   }
 }
 
 class _DriverResult {
+  final String driverId;
   final String driverName;
   int? gridPosition;
   int? finishPosition;
 
   _DriverResult({
+    required this.driverId,
     required this.driverName,
   });
 }

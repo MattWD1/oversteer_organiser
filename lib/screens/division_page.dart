@@ -2,16 +2,19 @@ import 'package:flutter/material.dart';
 import '../models/competition.dart';
 import '../models/event.dart';
 import '../repositories/event_repository.dart';
+import '../repositories/driver_repository.dart';
 import 'session_page.dart';
 
 class DivisionPage extends StatefulWidget {
   final Competition competition;
   final EventRepository eventRepository;
+  final DriverRepository driverRepository;
 
   const DivisionPage({
     super.key,
     required this.competition,
     required this.eventRepository,
+    required this.driverRepository,
   });
 
   @override
@@ -66,7 +69,10 @@ class _DivisionPageState extends State<DivisionPage> {
                 onTap: () {
                   Navigator.of(context).push(
                     MaterialPageRoute(
-                      builder: (_) => SessionPage(event: event),
+                      builder: (_) => SessionPage(
+                        event: event,
+                        driverRepository: widget.driverRepository,
+                      ),
                     ),
                   );
                 },
