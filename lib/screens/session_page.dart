@@ -1,3 +1,4 @@
+// lib/screens/session_page.dart
 import 'package:flutter/material.dart';
 
 import '../models/event.dart';
@@ -48,6 +49,7 @@ class _SessionPageState extends State<SessionPage> {
 
     final resultMap = <String, SessionResult>{};
 
+    // Initialise base results for every driver
     for (final d in drivers) {
       resultMap[d.id] = SessionResult(
         eventId: widget.event.id,
@@ -55,6 +57,7 @@ class _SessionPageState extends State<SessionPage> {
       );
     }
 
+    // Merge in any existing saved results
     for (final r in existingResults) {
       if (resultMap.containsKey(r.driverId)) {
         resultMap[r.driverId] = resultMap[r.driverId]!.copyWith(
@@ -64,7 +67,7 @@ class _SessionPageState extends State<SessionPage> {
       }
     }
 
-    // Create controllers
+    // Create / refresh controllers
     for (final d in drivers) {
       final res = resultMap[d.id]!;
 
@@ -84,6 +87,61 @@ class _SessionPageState extends State<SessionPage> {
       _resultsByDriverId = resultMap;
       _isLoading = false;
     });
+  }
+
+  List<String> _validateResults() {
+    final issues = <String>[];
+
+    // 1) Check every driver has both grid and finish
+    for (final driver in _drivers) {
+      final result = _resultsByDriverId[driver.id];
+
+      if (result == null) {
+        issues.add('No result entered for ${driver.name}.');
+        continue;
+      }
+
+      if (result.gridPosition == null) {
+        issues.add('Missing GRID position for ${driver.name}.');
+      }
+
+      if (result.finishPosition == null) {
+        issues.add('Missing FINISH position for ${driver.name}.');
+      }
+    }
+
+    // 2) Check for duplicate finish positions (e.g. two drivers P1)
+    final finishMap = <int, List<String>>{};
+    for (final driver in _drivers) {
+      final finish = _resultsByDriverId[driver.id]?.finishPosition;
+      if (finish == null) continue;
+
+      finishMap.putIfAbsent(finish, () => []);
+      finishMap[finish]!.add(driver.name);
+    }
+
+    finishMap.forEach((position, names) {
+      if (names.length > 1) {
+        issues.add(
+          'Duplicate FINISH position $position for: ${names.join(', ')}.',
+        );
+      }
+    });
+
+    // 3) Check that finish positions are in a sensible range
+    final maxPosition = _drivers.length;
+    for (final driver in _drivers) {
+      final finish = _resultsByDriverId[driver.id]?.finishPosition;
+      if (finish == null) continue;
+
+      if (finish < 1 || finish > maxPosition) {
+        issues.add(
+          'Finish position for ${driver.name} should be between 1 and $maxPosition.',
+        );
+      }
+    }
+
+    return issues;
   }
 
   void _updateGridPosition(String driverId, String value) {
@@ -107,6 +165,48 @@ class _SessionPageState extends State<SessionPage> {
   Future<void> _save() async {
     setState(() => _isSaving = true);
 
+    // Run validation first
+    final issues = _validateResults();
+
+    if (issues.isNotEmpty) {
+      setState(() => _isSaving = false);
+
+      if (mounted) {
+        await showDialog<void>(
+          context: context,
+          builder: (context) {
+            return AlertDialog(
+              title: const Text('Validation issues'),
+              content: SizedBox(
+                width: double.maxFinite,
+                child: ListView(
+                  shrinkWrap: true,
+                  children: issues
+                      .map(
+                        (msg) => Padding(
+                          padding: const EdgeInsets.symmetric(vertical: 2),
+                          child: Text('• $msg'),
+                        ),
+                      )
+                      .toList(),
+                ),
+              ),
+              actions: [
+                TextButton(
+                  onPressed: () => Navigator.of(context).pop(),
+                  child: const Text('OK'),
+                ),
+              ],
+            );
+          },
+        );
+      }
+
+      // User needs to fix issues and press Save again
+      return;
+    }
+
+    // If we get here, results are valid → save them
     final results = _resultsByDriverId.values.toList();
     widget.sessionResultRepository
         .saveResultsForEvent(widget.event.id, results);
@@ -146,7 +246,6 @@ class _SessionPageState extends State<SessionPage> {
                     itemCount: _drivers.length,
                     itemBuilder: (context, index) {
                       final driver = _drivers[index];
-                      
 
                       final gridController = _gridControllers[driver.id]!;
                       final finishController =
