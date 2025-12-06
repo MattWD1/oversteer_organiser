@@ -6,14 +6,16 @@ import 'repositories/competition_repository.dart';
 import 'repositories/event_repository.dart';
 import 'repositories/driver_repository.dart';
 import 'repositories/session_result_repository.dart';
+import 'repositories/validation_issue_repository.dart';
 
 void main() {
-  // Create repositories once
+  // Create repositories once for the whole app
   final leagueRepository = InMemoryLeagueRepository();
   final competitionRepository = InMemoryCompetitionRepository();
   final eventRepository = InMemoryEventRepository();
   final driverRepository = InMemoryDriverRepository();
   final sessionResultRepository = SessionResultRepository();
+  final validationIssueRepository = ValidationIssueRepository();
 
   runApp(
     OversteerApp(
@@ -22,6 +24,7 @@ void main() {
       eventRepository: eventRepository,
       driverRepository: driverRepository,
       sessionResultRepository: sessionResultRepository,
+      validationIssueRepository: validationIssueRepository,
     ),
   );
 }
@@ -32,6 +35,7 @@ class OversteerApp extends StatelessWidget {
   final EventRepository eventRepository;
   final DriverRepository driverRepository;
   final SessionResultRepository sessionResultRepository;
+  final ValidationIssueRepository validationIssueRepository;
 
   const OversteerApp({
     super.key,
@@ -40,6 +44,7 @@ class OversteerApp extends StatelessWidget {
     required this.eventRepository,
     required this.driverRepository,
     required this.sessionResultRepository,
+    required this.validationIssueRepository,
   });
 
   @override
@@ -57,6 +62,7 @@ class OversteerApp extends StatelessWidget {
         eventRepository: eventRepository,
         driverRepository: driverRepository,
         sessionResultRepository: sessionResultRepository,
+        validationIssueRepository: validationIssueRepository,
       ),
     );
   }

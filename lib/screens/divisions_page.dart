@@ -7,6 +7,7 @@ import '../repositories/competition_repository.dart';
 import '../repositories/event_repository.dart';
 import '../repositories/driver_repository.dart';
 import '../repositories/session_result_repository.dart';
+import '../repositories/validation_issue_repository.dart';
 import 'events_page.dart';
 
 class DivisionsPage extends StatefulWidget {
@@ -16,6 +17,7 @@ class DivisionsPage extends StatefulWidget {
   final EventRepository eventRepository;
   final DriverRepository driverRepository;
   final SessionResultRepository sessionResultRepository;
+  final ValidationIssueRepository validationIssueRepository;
 
   const DivisionsPage({
     super.key,
@@ -25,6 +27,7 @@ class DivisionsPage extends StatefulWidget {
     required this.eventRepository,
     required this.driverRepository,
     required this.sessionResultRepository,
+    required this.validationIssueRepository,
   });
 
   @override
@@ -89,6 +92,8 @@ class _DivisionsPageState extends State<DivisionsPage> {
                         driverRepository: widget.driverRepository,
                         sessionResultRepository:
                             widget.sessionResultRepository,
+                        validationIssueRepository:
+                            widget.validationIssueRepository,
                       ),
                     ),
                   );

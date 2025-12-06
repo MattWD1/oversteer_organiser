@@ -7,7 +7,9 @@ import '../models/event.dart';
 import '../repositories/event_repository.dart';
 import '../repositories/driver_repository.dart';
 import '../repositories/session_result_repository.dart';
+import '../repositories/validation_issue_repository.dart';
 import 'session_page.dart';
+import 'issue_log_page.dart';
 
 class EventsPage extends StatefulWidget {
   final League league;
@@ -16,6 +18,7 @@ class EventsPage extends StatefulWidget {
   final EventRepository eventRepository;
   final DriverRepository driverRepository;
   final SessionResultRepository sessionResultRepository;
+  final ValidationIssueRepository validationIssueRepository;
 
   const EventsPage({
     super.key,
@@ -25,6 +28,7 @@ class EventsPage extends StatefulWidget {
     required this.eventRepository,
     required this.driverRepository,
     required this.sessionResultRepository,
+    required this.validationIssueRepository,
   });
 
   @override
@@ -80,7 +84,27 @@ class _EventsPageState extends State<EventsPage> {
                 subtitle: Text(
                   'Date: ${event.date.day}/${event.date.month}/${event.date.year}',
                 ),
-                trailing: const Icon(Icons.chevron_right),
+                trailing: Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    IconButton(
+                      tooltip: 'Issue log',
+                      icon: const Icon(Icons.warning_amber_outlined),
+                      onPressed: () {
+                        Navigator.of(context).push(
+                          MaterialPageRoute(
+                            builder: (_) => IssueLogPage(
+                              event: event,
+                              validationIssueRepository:
+                                  widget.validationIssueRepository,
+                            ),
+                          ),
+                        );
+                      },
+                    ),
+                    const Icon(Icons.chevron_right),
+                  ],
+                ),
                 onTap: () {
                   Navigator.of(context).push(
                     MaterialPageRoute(
@@ -89,6 +113,8 @@ class _EventsPageState extends State<EventsPage> {
                         driverRepository: widget.driverRepository,
                         sessionResultRepository:
                             widget.sessionResultRepository,
+                        validationIssueRepository:
+                            widget.validationIssueRepository,
                       ),
                     ),
                   );

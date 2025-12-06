@@ -6,6 +6,7 @@ import '../repositories/competition_repository.dart';
 import '../repositories/event_repository.dart';
 import '../repositories/driver_repository.dart';
 import '../repositories/session_result_repository.dart';
+import '../repositories/validation_issue_repository.dart';
 import 'competitions_page.dart';
 
 class LeaguesPage extends StatefulWidget {
@@ -14,6 +15,7 @@ class LeaguesPage extends StatefulWidget {
   final EventRepository eventRepository;
   final DriverRepository driverRepository;
   final SessionResultRepository sessionResultRepository;
+  final ValidationIssueRepository validationIssueRepository;
 
   const LeaguesPage({
     super.key,
@@ -22,6 +24,7 @@ class LeaguesPage extends StatefulWidget {
     required this.eventRepository,
     required this.driverRepository,
     required this.sessionResultRepository,
+    required this.validationIssueRepository,
   });
 
   @override
@@ -85,6 +88,8 @@ class _LeaguesPageState extends State<LeaguesPage> {
                         driverRepository: widget.driverRepository,
                         sessionResultRepository:
                             widget.sessionResultRepository,
+                        validationIssueRepository:
+                            widget.validationIssueRepository,
                       ),
                     ),
                   );
