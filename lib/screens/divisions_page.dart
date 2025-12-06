@@ -9,6 +9,7 @@ import '../repositories/driver_repository.dart';
 import '../repositories/session_result_repository.dart';
 import '../repositories/validation_issue_repository.dart';
 import 'events_page.dart';
+import 'standings_page.dart';
 
 class DivisionsPage extends StatefulWidget {
   final League league;
@@ -80,7 +81,31 @@ class _DivisionsPageState extends State<DivisionsPage> {
 
               return ListTile(
                 title: Text(division.name),
-                trailing: const Icon(Icons.chevron_right),
+                trailing: Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    IconButton(
+                      tooltip: 'View standings',
+                      icon: const Icon(Icons.emoji_events_outlined),
+                      onPressed: () {
+                        Navigator.of(context).push(
+                          MaterialPageRoute(
+                            builder: (_) => StandingsPage(
+                              league: widget.league,
+                              competition: widget.competition,
+                              division: division,
+                              eventRepository: widget.eventRepository,
+                              driverRepository: widget.driverRepository,
+                              sessionResultRepository:
+                                  widget.sessionResultRepository,
+                            ),
+                          ),
+                        );
+                      },
+                    ),
+                    const Icon(Icons.chevron_right),
+                  ],
+                ),
                 onTap: () {
                   Navigator.of(context).push(
                     MaterialPageRoute(
