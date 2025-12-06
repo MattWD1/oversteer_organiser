@@ -121,3 +121,31 @@
   - Now both duplicate Grid and duplicate Finish positions are logged and block saving.
 
 ---
+
+---
+
+## Issue 10 – Standings showed no data despite events existing
+
+- **Date:** 2025-12-06  
+- **Area:** StandingsPage / Data assumptions  
+- **Description:** During initial testing of `StandingsPage`, some divisions showed “No classified results yet for this division” even though events existed in the calendar.  
+- **Cause:** `StandingsPage` correctly only counts events that have **saved, validated** `SessionResult`s with a non-null `finishPosition`. Divisions with events but no saved session results (or only incomplete/invalid results that failed validation) legitimately produced an empty standings table.  
+- **Fix / Decision:** No code change. This behaviour is intentional:
+  - A division will only show standings once at least one event has valid, classified finish positions saved.
+  - This was documented in the feature description so it is clear that “events existing” is not enough; **classified results** are required.
+
+---
+
+## Issue 11 – Consistency between Session summary and Standings
+
+- **Date:** 2025-12-06  
+- **Area:** SessionPage / StandingsPage  
+- **Description:** Needed to ensure that what organisers see on the **“Current results (by finish)”** summary in `SessionPage` matches how `StandingsPage` interprets data when awarding points.  
+- **Cause:** `SessionPage` shows all drivers with whatever grid/finish values are currently entered (including nulls), while `StandingsPage` only awards points for non-null `finishPosition` values. Without clarification, this could look like a mismatch.  
+- **Fix / Decision:**  
+  - Confirmed that `StandingsPage`:
+    - Ignores drivers with `finishPosition == null` (unclassified / incomplete).
+    - Ignores events where no valid results have been saved.
+  - Left the logic as-is, but documented that:
+    - The Session summary is a **live editing view**.
+    - Standings only reflect **saved, fully validated** results.
