@@ -35,10 +35,11 @@
 ## Issue 4 – Optional parameters in `_DriverResult` never used
 
 - **Date:** 2025-12-05  
-- **Area:** SessionPage / Results input  
+- **Area:** SessionPage / Results input (early version)  
 - **Description:** Dart analyzer warning: “A value for optional parameter `gridPosition` isn't ever given” (and similarly for `finishPosition`) in the `_DriverResult` constructor.  
 - **Cause:** `_DriverResult` defined `gridPosition` and `finishPosition` as optional constructor parameters, but instances were only created with `driverName`. The positions were set later from the text fields, so the constructor parameters were redundant.  
-- **Fix:** Simplified `_DriverResult` so the constructor only requires `driverName`, leaving `gridPosition` and `finishPosition` as nullable fields that are updated in `onChanged`. This cleared the warnings without changing runtime behaviour.
+- **Fix:** Simplified `_DriverResult` so the constructor only required `driverName`, leaving `gridPosition` and `finishPosition` as nullable fields that were updated in `onChanged`. This cleared the warnings without changing runtime behaviour.  
+- **Note:** This structure was later replaced entirely by the `SessionResult` model.
 
 ---
 
@@ -54,9 +55,69 @@
   - Parent widgets (`LeaguesPage`, `CompetitionsPage`, `DivisionPage`, and `main.dart`) were not all updated to define and pass the parameter consistently, and `leagues_page.dart` was initially missing the `driver_repository.dart` import.  
 - **Fix:** Standardised the wiring:
   - Added `DriverRepository` creation in `main.dart` and passed it into `LeaguesPage`.
-  - Updated `LeaguesPage`, `CompetitionsPage`, and `DivisionPage` to accept a `DriverRepository` in their constructors and pass it down the navigation chain.
+  - Updated `LeaguesPage`, `CompetitionsPage`, and `DivisionsPage` to accept a `DriverRepository` in their constructors and pass it down the navigation chain.
   - Updated `SessionPage` to require `driverRepository` and use it to load drivers.
   - Added `import '../repositories/driver_repository.dart';` where needed.  
   After these changes, all `driverRepository`-related errors were resolved.
+
+---
+
+## Issue 6 – Duplicate `league_page.dart` vs `leagues_page.dart`
+
+- **Date:** 2025-12-06  
+- **Area:** Screens / Navigation  
+- **Description:** Analyzer error: “The named parameter `validationIssueRepository` is required, but there's no corresponding argument” in `league_page.dart`. At the same time, a separate `leagues_page.dart` existed and was used as the real home screen.  
+- **Cause:** An older file `league_page.dart` (singular) remained in the project alongside the newer `leagues_page.dart` (plural). The old file had an outdated constructor and was no longer used by `main.dart`, but it still produced static analysis errors.  
+- **Fix:** Removed `lib/screens/league_page.dart` entirely. The app now only uses `lib/screens/leagues_page.dart` as the entry screen, which matches the imports in `main.dart`. This eliminated the stray constructor error and reduced confusion.
+
+---
+
+## Issue 7 – `ValidationIssue` ID helper (`suffix_` / `_issueId`) warnings
+
+- **Date:** 2025-12-06  
+- **Area:** SessionPage / ValidationIssue generation  
+- **Description:**
+  - Analyzer error: “Undefined name `suffix_`.”
+  - Lint warning: “The local variable `_issueId` starts with an underscore” (for a helper defined inside `_validateResults`).  
+- **Cause:** While introducing `ValidationIssue` IDs, an intermediate implementation used a local helper function `_issueId(suffix_)`:
+  - The parameter name `suffix_` was mis-typed in one place, causing the undefined identifier error.
+  - The lint rule discouraged leading underscores for local identifiers.  
+- **Fix:** Simplified the ID generation:
+  - Removed the helper and generated `id` strings inline using string interpolation:
+    - e.g. `'${event.id}_MISSING_GRID_${driver.id}_${timestamp}'`.
+  - This removed both the undefined name error and the lint warning, and the code is now easier to read.
+
+---
+
+## Issue 8 – `validationIssueRepository` not passed through navigation
+
+- **Date:** 2025-12-06  
+- **Area:** Navigation / Dependency wiring  
+- **Description:** Error: “The named parameter `validationIssueRepository` is required, but there's no corresponding argument” when building widgets such as `EventsPage` or `SessionPage`.  
+- **Cause:** After adding `ValidationIssueRepository` to support the Issue Log, the constructor for several screens was updated, but the parent widgets were not initially passing the new dependency down the chain.  
+- **Fix:** Standardised wiring for validation issues:
+  - Created a single `ValidationIssueRepository` instance in `main.dart`.
+  - Passed it into `LeaguesPage`, then through `CompetitionsPage`, `DivisionsPage`, and `EventsPage`.
+  - Updated `SessionPage` and `IssueLogPage` to receive `validationIssueRepository` from their parents.  
+  After these changes, all `validationIssueRepository` argument errors were resolved.
+
+---
+
+## Issue 9 – SessionPage validation ignored duplicate Grid positions
+
+- **Date:** 2025-12-06  
+- **Area:** SessionPage / Validation logic  
+- **Description:** The initial validation logic correctly detected:
+  - Missing grid/finish positions.
+  - Duplicate **finish** positions.
+  - Invalid finish ranges.  
+  However, duplicate **grid** positions were not checked. Two drivers could share the same grid value (e.g. both set to 3) and the results would save without any issues raised.  
+- **Cause:** `_validateResults()` only built a map for finish positions (`finishMap`). There was no equivalent map for grid positions, so duplicates on the grid were never detected.  
+- **Fix:** Extended `_validateResults()`:
+  - Added a `gridMap<int, List<Driver>>` to group drivers by `gridPosition`.
+  - For any position with more than one driver, created a `ValidationIssue` with:
+    - `code: 'DUPLICATE_GRID'`
+    - Message: “Duplicate GRID position X for: Driver A, Driver B.”  
+  - Now both duplicate Grid and duplicate Finish positions are logged and block saving.
 
 ---
