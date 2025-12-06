@@ -235,6 +235,71 @@ class _SessionPageState extends State<SessionPage> {
     });
   }
 
+  List<SessionResult> _getSortedResults() {
+    final results = _resultsByDriverId.values.toList();
+
+    results.sort((a, b) {
+      final fa = a.finishPosition;
+      final fb = b.finishPosition;
+
+      if (fa == null && fb == null) return 0;
+      if (fa == null) return 1; // nulls last
+      if (fb == null) return -1;
+      return fa.compareTo(fb);
+    });
+
+    return results;
+  }
+
+  Widget _buildCurrentResultsSummary() {
+    if (_resultsByDriverId.isEmpty) {
+      return const SizedBox.shrink();
+    }
+
+    final sortedResults = _getSortedResults();
+
+    // Only show if at least one value (grid or finish) has been entered or loaded
+    final hasAnyValue = sortedResults.any(
+      (r) => r.gridPosition != null || r.finishPosition != null,
+    );
+
+    if (!hasAnyValue) {
+      return const SizedBox.shrink();
+    }
+
+    return Padding(
+      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          const Divider(),
+          const Text(
+            'Current results (by finish)',
+            style: TextStyle(
+              fontWeight: FontWeight.bold,
+            ),
+          ),
+          const SizedBox(height: 4),
+          ...sortedResults.map((res) {
+            final driver = _drivers.firstWhere((d) => d.id == res.driverId);
+            final grid = res.gridPosition?.toString() ?? '-';
+            final finish = res.finishPosition?.toString() ?? '-';
+            final positionLabel =
+                res.finishPosition != null ? 'P${res.finishPosition}' : '—';
+
+            return Padding(
+              padding: const EdgeInsets.symmetric(vertical: 1),
+              child: Text(
+                '$positionLabel: ${driver.name} (Grid $grid → Finish $finish)',
+              ),
+            );
+          // ignore: unnecessary_to_list_in_spreads
+          }).toList(),
+        ],
+      ),
+    );
+  }
+
   Future<void> _save() async {
     setState(() => _isSaving = true);
 
@@ -365,6 +430,7 @@ class _SessionPageState extends State<SessionPage> {
                     },
                   ),
                 ),
+                _buildCurrentResultsSummary(),
                 Padding(
                   padding:
                       const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
