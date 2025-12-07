@@ -1,33 +1,24 @@
+// lib/repositories/session_result_repository.dart
+
 import '../models/session_result.dart';
 
 class SessionResultRepository {
-  // key: eventId, value: list of results for that event
-  final Map<String, List<SessionResult>> _resultsByEvent = {};
+  final Map<String, List<SessionResult>> _resultsByEventId = {};
 
+  /// Returns a copy of the results list for the given eventId.
   List<SessionResult> getResultsForEvent(String eventId) {
-    final existing = _resultsByEvent[eventId] ?? [];
-    return existing
-        .map(
-          (r) => SessionResult(
-            eventId: r.eventId,
-            driverId: r.driverId,
-            gridPosition: r.gridPosition,
-            finishPosition: r.finishPosition,
-          ),
-        )
-        .toList();
+    final list = _resultsByEventId[eventId];
+    if (list == null) return [];
+    return List<SessionResult>.from(list);
   }
 
+  /// Saves the full set of results for a given event.
   void saveResultsForEvent(String eventId, List<SessionResult> results) {
-    _resultsByEvent[eventId] = results
-        .map(
-          (r) => SessionResult(
-            eventId: r.eventId,
-            driverId: r.driverId,
-            gridPosition: r.gridPosition,
-            finishPosition: r.finishPosition,
-          ),
-        )
-        .toList();
+    _resultsByEventId[eventId] = List<SessionResult>.from(results);
+  }
+
+  /// Clears any stored results for the event.
+  void clearResultsForEvent(String eventId) {
+    _resultsByEventId.remove(eventId);
   }
 }

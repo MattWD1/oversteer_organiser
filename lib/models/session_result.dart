@@ -1,25 +1,20 @@
+// lib/models/session_result.dart
+
 class SessionResult {
-  final String eventId;
   final String driverId;
+
   int? gridPosition;
   int? finishPosition;
 
+  /// Base race time in milliseconds from lights out to chequered flag.
+  /// The winner should have the smallest raceTimeMillis, and other drivers
+  /// have their own full race time (not just the +gap string).
+  int? raceTimeMillis;
+
   SessionResult({
-    required this.eventId,
     required this.driverId,
     this.gridPosition,
     this.finishPosition,
+    this.raceTimeMillis,
   });
-
-  SessionResult copyWith({
-    int? gridPosition,
-    int? finishPosition,
-  }) {
-    return SessionResult(
-      eventId: eventId,
-      driverId: driverId,
-      gridPosition: gridPosition ?? this.gridPosition,
-      finishPosition: finishPosition ?? this.finishPosition,
-    );
-  }
 }

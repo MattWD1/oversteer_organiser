@@ -1,3 +1,5 @@
+// lib/screens/standings_page.dart
+
 import 'package:flutter/material.dart';
 
 import '../models/league.dart';
@@ -56,7 +58,6 @@ class _StandingsPageState extends State<StandingsPage> {
     });
 
     try {
-      // 1) Get all events for this division
       final List<Event> events =
           await widget.eventRepository.getEventsForDivision(widget.division.id);
 
@@ -68,10 +69,9 @@ class _StandingsPageState extends State<StandingsPage> {
         return;
       }
 
-      // driverId -> standing
       final Map<String, _DriverStanding> standingsMap = {};
 
-      // --------- PART A: Base points from race results ---------
+      // --------- PART A: Base points from adjusted race results ---------
       for (final event in events) {
         final List<SessionResult> results =
             widget.sessionResultRepository.getResultsForEvent(event.id);
@@ -86,90 +86,105 @@ class _StandingsPageState extends State<StandingsPage> {
           for (final d in eventDrivers) d.id: d,
         };
 
+        // Time & points penalties for this event
+        final List<Penalty> eventPenalties =
+            widget.penaltyRepository.getPenaltiesForEvent(event.id);
+
+        final Map<String, int> timePenaltySecondsByDriver = {};
+        final Map<String, int> pointsPenaltyByDriver = {};
+
+        for (final p in eventPenalties) {
+          if (p.type == 'Time') {
+            timePenaltySecondsByDriver[p.driverId] =
+                (timePenaltySecondsByDriver[p.driverId] ?? 0) + p.value;
+          } else if (p.type == 'Points') {
+            pointsPenaltyByDriver[p.driverId] =
+                (pointsPenaltyByDriver[p.driverId] ?? 0) + p.value;
+          }
+        }
+
+        // Build per-event adjusted times
+        final List<_EventClassificationEntry> eventEntries = [];
+
         for (final result in results) {
-          final int? finish = result.finishPosition;
-          if (finish == null) {
-            // No classified finish → ignore for base points
+          final baseTimeMs = result.raceTimeMillis;
+          if (baseTimeMs == null) {
+            // No race time, cannot classify fairly
             continue;
           }
 
-          final int basePoints = _pointsForFinish(finish);
-          if (basePoints <= 0) {
-            continue;
-          }
+          final driverId = result.driverId;
+          final driver = driverById[driverId];
+          final driverName = driver?.name ?? 'Unknown driver';
 
-          final String driverId = result.driverId;
-          final Driver? driver = driverById[driverId];
-          final String driverName = driver?.name ?? 'Unknown driver';
+          final timePenSec = timePenaltySecondsByDriver[driverId] ?? 0;
+          final adjustedTimeMs = baseTimeMs + timePenSec * 1000;
 
-          if (!standingsMap.containsKey(driverId)) {
-            standingsMap[driverId] = _DriverStanding(
+          eventEntries.add(
+            _EventClassificationEntry(
               driverId: driverId,
               driverName: driverName,
-            );
-          }
+              baseTimeMs: baseTimeMs,
+              adjustedTimeMs: adjustedTimeMs,
+            ),
+          );
+        }
 
-          final standing = standingsMap[driverId]!;
+        if (eventEntries.isEmpty) {
+          continue;
+        }
+
+        // Sort event entries by adjusted time ascending
+        eventEntries.sort(
+          (a, b) => a.adjustedTimeMs.compareTo(b.adjustedTimeMs),
+        );
+
+        // Assign final event positions based on adjusted times
+        for (var index = 0; index < eventEntries.length; index++) {
+          final entry = eventEntries[index];
+          final eventPos = index + 1;
+          final basePoints = _pointsForFinish(eventPos);
+
+          final standing = standingsMap.putIfAbsent(
+            entry.driverId,
+            () => _DriverStanding(
+              driverId: entry.driverId,
+              driverName: entry.driverName,
+            ),
+          );
+
           standing.basePoints += basePoints;
-          if (finish == 1) {
+          if (eventPos == 1) {
             standing.wins += 1;
           }
         }
-      }
 
-      // --------- PART B: Points penalties integration ---------
-      for (final event in events) {
-        final List<Penalty> penalties =
-            widget.penaltyRepository.getPenaltiesForEvent(event.id);
-
-        if (penalties.isEmpty) continue;
-
-        for (final penalty in penalties) {
-          if (penalty.type != 'Points') {
-            // Time / Grid penalties are just recorded for now
-            continue;
-          }
-
-          final driverId = penalty.driverId;
-
-          // Try to resolve name from latest driver list for this event
-          final List<Driver> eventDrivers =
-              await widget.driverRepository.getDriversForEvent(event.id);
-          final Driver? driver = eventDrivers
-              .where((d) => d.id == driverId)
-              .cast<Driver?>()
-              .firstWhere(
-                (d) => d != null,
-                orElse: () => null,
-              );
-
-          final String driverName = driver?.name ?? 'Unknown driver';
-
-          if (!standingsMap.containsKey(driverId)) {
-            // Driver has a penalty but no classified results yet
-            standingsMap[driverId] = _DriverStanding(
+        // Apply any points penalties for this event
+        pointsPenaltyByDriver.forEach((driverId, penaltyPoints) {
+          final driverName = driverById[driverId]?.name ?? 'Unknown driver';
+          final standing = standingsMap.putIfAbsent(
+            driverId,
+            () => _DriverStanding(
               driverId: driverId,
               driverName: driverName,
-            );
-          }
-
-          final standing = standingsMap[driverId]!;
-          standing.penaltyPoints += penalty.value; // usually negative
-        }
+            ),
+          );
+          standing.penaltyPoints += penaltyPoints; // typically negative
+        });
       }
 
-      // --------- PART C: Final totals & sort ---------
       final standingsList = standingsMap.values.toList();
 
+      // Compute final totals
       for (final s in standingsList) {
         s.totalPoints = s.basePoints + s.penaltyPoints;
       }
 
+      // Sort drivers:
+      // 1) Total points (desc)
+      // 2) Wins (desc)
+      // 3) Driver name (asc)
       standingsList.sort((a, b) {
-        // Sort by:
-        // 1) Total points (desc)
-        // 2) Wins (desc)
-        // 3) Driver name (asc)
         if (b.totalPoints != a.totalPoints) {
           return b.totalPoints.compareTo(a.totalPoints);
         }
@@ -192,7 +207,6 @@ class _StandingsPageState extends State<StandingsPage> {
   }
 
   int _pointsForFinish(int position) {
-    // F1-style scoring for top 10; adjust later if needed
     switch (position) {
       case 1:
         return 25;
@@ -246,7 +260,6 @@ class _StandingsPageState extends State<StandingsPage> {
                           final pen = standing.penaltyPoints;
                           final total = standing.totalPoints;
 
-                          // e.g. "Points: 36 (Base 40, Penalties -4) • Wins: 2"
                           final subtitle =
                               'Points: $total (Base $base, Penalties $pen) • Wins: ${standing.wins}';
 
@@ -275,13 +288,23 @@ class _DriverStanding {
   _DriverStanding({
     required this.driverId,
     required this.driverName,
-    // ignore: unused_element_parameter
-    this.basePoints = 0,
-    // ignore: unused_element_parameter
-    this.penaltyPoints = 0,
-    // ignore: unused_element_parameter
-    this.totalPoints = 0,
-    // ignore: unused_element_parameter
-    this.wins = 0,
+  })  : basePoints = 0,
+        penaltyPoints = 0,
+        totalPoints = 0,
+        wins = 0;
+}
+
+/// Internal helper to represent classification for a single event.
+class _EventClassificationEntry {
+  final String driverId;
+  final String driverName;
+  final int baseTimeMs;
+  final int adjustedTimeMs;
+
+  _EventClassificationEntry({
+    required this.driverId,
+    required this.driverName,
+    required this.baseTimeMs,
+    required this.adjustedTimeMs,
   });
 }

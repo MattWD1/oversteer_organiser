@@ -32,7 +32,7 @@ class _PenaltiesPageState extends State<PenaltiesPage> {
   List<Penalty> _penalties = [];
 
   String? _selectedDriverId;
-  String _selectedType = 'Points'; // Points / Time / Grid
+  String _selectedType = 'Time'; // Time / Points
   final TextEditingController _valueController = TextEditingController();
   final TextEditingController _reasonController = TextEditingController();
 
@@ -82,7 +82,7 @@ class _PenaltiesPageState extends State<PenaltiesPage> {
 
     final value = int.tryParse(rawValue);
     if (value == null) {
-      _showSnackBar('Penalty value must be a number (e.g. -5).');
+      _showSnackBar('Penalty value must be an integer (e.g. 10 or -5).');
       return;
     }
 
@@ -100,7 +100,7 @@ class _PenaltiesPageState extends State<PenaltiesPage> {
       id: penaltyId,
       eventId: widget.event.id,
       driverId: _selectedDriverId!,
-      type: _selectedType,
+      type: _selectedType, // 'Time' or 'Points'
       value: value,
       reason: reason,
       createdAt: now,
@@ -125,24 +125,24 @@ class _PenaltiesPageState extends State<PenaltiesPage> {
     );
   }
 
+  String _formatPenaltyTitle(Penalty p) {
+    if (p.type == 'Time') {
+      final sign = p.value > 0 ? '+' : '';
+      return 'Time: $sign${p.value}s';
+    } else if (p.type == 'Points') {
+      final sign = p.value > 0 ? '+' : '';
+      return 'Penalty points: $sign${p.value}';
+    } else {
+      final sign = p.value > 0 ? '+' : '';
+      return '${p.type}: $sign${p.value}';
+    }
+  }
+
   @override
   void dispose() {
     _valueController.dispose();
     _reasonController.dispose();
     super.dispose();
-  }
-
-  String _formatPenaltyTitle(Penalty p) {
-    switch (p.type) {
-      case 'Points':
-        return 'Points: ${p.value}';
-      case 'Time':
-        return 'Time: ${p.value} s';
-      case 'Grid':
-        return 'Grid: ${p.value} positions';
-      default:
-        return '${p.type}: ${p.value}';
-    }
   }
 
   @override
@@ -174,8 +174,7 @@ class _PenaltiesPageState extends State<PenaltiesPage> {
                               ),
                               const SizedBox(height: 8),
                               DropdownButtonFormField<String>(
-                                // ignore: deprecated_member_use
-                                value: _selectedDriverId,
+                                initialValue: _selectedDriverId,
                                 decoration: const InputDecoration(
                                   labelText: 'Driver',
                                   border: OutlineInputBorder(),
@@ -196,24 +195,21 @@ class _PenaltiesPageState extends State<PenaltiesPage> {
                               ),
                               const SizedBox(height: 8),
                               DropdownButtonFormField<String>(
-                                // ignore: deprecated_member_use
-                                value: _selectedType,
+                                initialValue: _selectedType,
                                 decoration: const InputDecoration(
                                   labelText: 'Penalty type',
                                   border: OutlineInputBorder(),
                                 ),
                                 items: const [
                                   DropdownMenuItem(
-                                    value: 'Points',
-                                    child: Text('Points penalty'),
-                                  ),
-                                  DropdownMenuItem(
                                     value: 'Time',
-                                    child: Text('Time penalty (seconds)'),
+                                    child:
+                                        Text('Time penalty (seconds added)'),
                                   ),
                                   DropdownMenuItem(
-                                    value: 'Grid',
-                                    child: Text('Grid drop (positions)'),
+                                    value: 'Points',
+                                    child: Text(
+                                        'Penalty points (championship deduction)'),
                                   ),
                                 ],
                                 onChanged: (value) {
@@ -228,7 +224,8 @@ class _PenaltiesPageState extends State<PenaltiesPage> {
                                 controller: _valueController,
                                 keyboardType: TextInputType.number,
                                 decoration: const InputDecoration(
-                                  labelText: 'Value (e.g. -5)',
+                                  labelText:
+                                      'Value (e.g. 10 for +10s, -5 for -5 points)',
                                   border: OutlineInputBorder(),
                                 ),
                               ),
@@ -263,20 +260,24 @@ class _PenaltiesPageState extends State<PenaltiesPage> {
                                   itemCount: _penalties.length,
                                   itemBuilder: (context, index) {
                                     final p = _penalties[index];
-                                    final driver = _drivers.firstWhere(
-                                      (d) => d.id == p.driverId,
-                                      orElse: () => Driver(
-                                        id: p.driverId,
-                                        name: 'Unknown driver',
-                                      ),
-                                    );
+
+                                    Driver? driver;
+                                    try {
+                                      driver = _drivers
+                                          .firstWhere((d) => d.id == p.driverId);
+                                    } catch (_) {
+                                      driver = null;
+                                    }
+
+                                    final driverName =
+                                        driver?.name ?? 'Unknown driver';
 
                                     return ListTile(
                                       leading: const Icon(
                                         Icons.gavel_outlined,
                                       ),
                                       title: Text(
-                                        '${driver.name} – ${_formatPenaltyTitle(p)}',
+                                        '$driverName – ${_formatPenaltyTitle(p)}',
                                       ),
                                       subtitle: Text(p.reason),
                                     );
