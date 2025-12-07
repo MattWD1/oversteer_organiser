@@ -1,5 +1,3 @@
-// lib/screens/events_page.dart
-
 import 'package:flutter/material.dart';
 
 import '../models/league.dart';
@@ -87,9 +85,7 @@ class _EventsPageState extends State<EventsPage> {
 
               return ListTile(
                 title: Text(event.name),
-                subtitle: Text(
-                  '${event.date.toLocal()}',
-                ),
+                subtitle: Text('${event.date.toLocal()}'),
                 trailing: Row(
                   mainAxisSize: MainAxisSize.min,
                   children: [
@@ -136,6 +132,7 @@ class _EventsPageState extends State<EventsPage> {
                             widget.sessionResultRepository,
                         validationIssueRepository:
                             widget.validationIssueRepository,
+                        penaltyRepository: widget.penaltyRepository,
                       ),
                     ),
                   );

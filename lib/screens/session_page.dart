@@ -1,6 +1,5 @@
-// lib/screens/session_page.dart
-
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 
 import '../models/event.dart';
 import '../models/driver.dart';
@@ -9,14 +8,14 @@ import '../models/validation_issue.dart';
 import '../repositories/driver_repository.dart';
 import '../repositories/session_result_repository.dart';
 import '../repositories/validation_issue_repository.dart';
-import 'package:flutter/services.dart';
-
+import '../repositories/penalty_repository.dart';
 
 class SessionPage extends StatefulWidget {
   final Event event;
   final DriverRepository driverRepository;
   final SessionResultRepository sessionResultRepository;
   final ValidationIssueRepository validationIssueRepository;
+  final PenaltyRepository penaltyRepository;
 
   const SessionPage({
     super.key,
@@ -24,6 +23,7 @@ class SessionPage extends StatefulWidget {
     required this.driverRepository,
     required this.sessionResultRepository,
     required this.validationIssueRepository,
+    required this.penaltyRepository,
   });
 
   @override
@@ -423,6 +423,7 @@ class _SessionPageState extends State<SessionPage> {
     return '+${seconds.toStringAsFixed(3)}';
   }
 
+  /// Uses race times + time penalties to show the live classification.
   Widget _buildCurrentResultsSummary() {
     final resultsWithTime = _resultsByDriverId.values
         .where((r) => r.raceTimeMillis != null)
@@ -432,39 +433,79 @@ class _SessionPageState extends State<SessionPage> {
       return const SizedBox.shrink();
     }
 
-    resultsWithTime.sort(
-      (a, b) => a.raceTimeMillis!.compareTo(b.raceTimeMillis!),
+    // Get time penalties for this event
+    final penalties =
+        widget.penaltyRepository.getPenaltiesForEvent(widget.event.id);
+
+    // driverId -> total time penalty in seconds
+    final Map<String, int> timePenaltySecondsByDriver = {};
+    for (final p in penalties) {
+      if (p.type == 'Time') {
+        timePenaltySecondsByDriver[p.driverId] =
+            (timePenaltySecondsByDriver[p.driverId] ?? 0) + p.value;
+      }
+    }
+
+    final driverById = {for (final d in _drivers) d.id: d};
+
+    // Build working rows with base + adjusted times
+    final rows = resultsWithTime.map((result) {
+      final baseTimeMs = result.raceTimeMillis!;
+      final penaltySec = timePenaltySecondsByDriver[result.driverId] ?? 0;
+      final adjustedTimeMs = baseTimeMs + penaltySec * 1000;
+
+      return {
+        'result': result,
+        'baseTimeMs': baseTimeMs,
+        'adjustedTimeMs': adjustedTimeMs,
+        'penaltySec': penaltySec,
+      };
+    }).toList();
+
+    // Sort by adjusted time (true classification)
+    rows.sort(
+      (a, b) =>
+          (a['adjustedTimeMs'] as int).compareTo(b['adjustedTimeMs'] as int),
     );
 
-    final leaderTimeMs = resultsWithTime.first.raceTimeMillis!;
-    final driverById = {for (final d in _drivers) d.id: d};
+    final leaderAdjustedMs = rows.first['adjustedTimeMs'] as int;
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         const Divider(),
         const Text(
-          'Current results (by time)',
+          'Current results (after time penalties)',
           style: TextStyle(
             fontWeight: FontWeight.bold,
           ),
         ),
         const SizedBox(height: 8),
-        ...resultsWithTime.map((result) {
+        ...rows.asMap().entries.map((entry) {
+          final index = entry.key;
+          final row = entry.value;
+
+          final result = row['result'] as SessionResult;
+          final baseTimeMs = row['baseTimeMs'] as int;
+          final adjustedTimeMs = row['adjustedTimeMs'] as int;
+          final penaltySec = row['penaltySec'] as int;
+
           final driver = driverById[result.driverId];
           final driverName = driver?.name ?? 'Unknown driver';
 
-          final pos = result.finishPosition;
-          final posLabel = pos != null ? 'P$pos' : '--';
+          final positionLabel = 'P${index + 1}';
 
-          final timeMs = result.raceTimeMillis!;
-          final text = timeMs == leaderTimeMs
-              ? _formatAbsoluteTime(timeMs)
-              : _formatGap(timeMs - leaderTimeMs);
+          final text = adjustedTimeMs == leaderAdjustedMs
+              ? _formatAbsoluteTime(baseTimeMs)
+              : _formatGap(adjustedTimeMs - leaderAdjustedMs);
+
+          final penaltyNote = penaltySec != 0
+              ? ' (includes ${penaltySec > 0 ? '+$penaltySec' : penaltySec}s)'
+              : '';
 
           return Padding(
             padding: const EdgeInsets.symmetric(vertical: 2),
-            child: Text('$posLabel: $driverName – $text'),
+            child: Text('$positionLabel: $driverName – $text$penaltyNote'),
           );
         }),
       ],
@@ -621,6 +662,7 @@ class _SessionPageState extends State<SessionPage> {
   }
 }
 
+/// Input formatter that locks the race time field to H:MM:SS.mmm
 class RaceTimeInputFormatter extends TextInputFormatter {
   // We expect exactly 8 digits: H MM SS mmm  →  1 + 2 + 2 + 3
   static const int _maxDigits = 8;
@@ -668,7 +710,6 @@ class RaceTimeInputFormatter extends TextInputFormatter {
 
     return TextEditingValue(
       text: text,
-      // Always keep cursor at the end of the formatted string
       selection: TextSelection.collapsed(offset: text.length),
     );
   }
