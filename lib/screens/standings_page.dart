@@ -6,9 +6,11 @@ import '../models/division.dart';
 import '../models/event.dart';
 import '../models/driver.dart';
 import '../models/session_result.dart';
+import '../models/penalty.dart';
 import '../repositories/event_repository.dart';
 import '../repositories/driver_repository.dart';
 import '../repositories/session_result_repository.dart';
+import '../repositories/penalty_repository.dart';
 
 class StandingsPage extends StatefulWidget {
   final League league;
@@ -17,6 +19,7 @@ class StandingsPage extends StatefulWidget {
   final EventRepository eventRepository;
   final DriverRepository driverRepository;
   final SessionResultRepository sessionResultRepository;
+  final PenaltyRepository penaltyRepository;
 
   const StandingsPage({
     super.key,
@@ -26,6 +29,7 @@ class StandingsPage extends StatefulWidget {
     required this.eventRepository,
     required this.driverRepository,
     required this.sessionResultRepository,
+    required this.penaltyRepository,
   });
 
   @override
@@ -64,11 +68,11 @@ class _StandingsPageState extends State<StandingsPage> {
         return;
       }
 
-      // Map of driverId -> standing
+      // driverId -> standing
       final Map<String, _DriverStanding> standingsMap = {};
 
+      // --------- PART A: Base points from race results ---------
       for (final event in events) {
-        // 2) Get results for this event
         final List<SessionResult> results =
             widget.sessionResultRepository.getResultsForEvent(event.id);
 
@@ -76,7 +80,6 @@ class _StandingsPageState extends State<StandingsPage> {
           continue;
         }
 
-        // 3) Get driver details for this event to resolve names
         final List<Driver> eventDrivers =
             await widget.driverRepository.getDriversForEvent(event.id);
         final Map<String, Driver> driverById = {
@@ -84,53 +87,97 @@ class _StandingsPageState extends State<StandingsPage> {
         };
 
         for (final result in results) {
-          final finish = result.finishPosition;
+          final int? finish = result.finishPosition;
           if (finish == null) {
-            // No classified finish -> ignore for points
+            // No classified finish → ignore for base points
             continue;
           }
 
-          final points = _pointsForFinish(finish);
-          if (points <= 0) {
-            // If you want only top X to score, this is enough
+          final int basePoints = _pointsForFinish(finish);
+          if (basePoints <= 0) {
             continue;
           }
 
-          final driverId = result.driverId;
-          final driver = driverById[driverId];
-          final driverName = driver?.name ?? 'Unknown Driver';
+          final String driverId = result.driverId;
+          final Driver? driver = driverById[driverId];
+          final String driverName = driver?.name ?? 'Unknown driver';
 
           if (!standingsMap.containsKey(driverId)) {
             standingsMap[driverId] = _DriverStanding(
               driverId: driverId,
               driverName: driverName,
-              totalPoints: 0,
-              wins: 0,
             );
           }
 
           final standing = standingsMap[driverId]!;
-          standing.totalPoints += points;
+          standing.basePoints += basePoints;
           if (finish == 1) {
             standing.wins += 1;
           }
         }
       }
 
-      final standingsList = standingsMap.values.toList()
-        ..sort((a, b) {
-          // Sort by:
-          // 1) Total points (desc)
-          // 2) Wins (desc)
-          // 3) Driver name (asc)
-          if (b.totalPoints != a.totalPoints) {
-            return b.totalPoints.compareTo(a.totalPoints);
+      // --------- PART B: Points penalties integration ---------
+      for (final event in events) {
+        final List<Penalty> penalties =
+            widget.penaltyRepository.getPenaltiesForEvent(event.id);
+
+        if (penalties.isEmpty) continue;
+
+        for (final penalty in penalties) {
+          if (penalty.type != 'Points') {
+            // Time / Grid penalties are just recorded for now
+            continue;
           }
-          if (b.wins != a.wins) {
-            return b.wins.compareTo(a.wins);
+
+          final driverId = penalty.driverId;
+
+          // Try to resolve name from latest driver list for this event
+          final List<Driver> eventDrivers =
+              await widget.driverRepository.getDriversForEvent(event.id);
+          final Driver? driver = eventDrivers
+              .where((d) => d.id == driverId)
+              .cast<Driver?>()
+              .firstWhere(
+                (d) => d != null,
+                orElse: () => null,
+              );
+
+          final String driverName = driver?.name ?? 'Unknown driver';
+
+          if (!standingsMap.containsKey(driverId)) {
+            // Driver has a penalty but no classified results yet
+            standingsMap[driverId] = _DriverStanding(
+              driverId: driverId,
+              driverName: driverName,
+            );
           }
-          return a.driverName.compareTo(b.driverName);
-        });
+
+          final standing = standingsMap[driverId]!;
+          standing.penaltyPoints += penalty.value; // usually negative
+        }
+      }
+
+      // --------- PART C: Final totals & sort ---------
+      final standingsList = standingsMap.values.toList();
+
+      for (final s in standingsList) {
+        s.totalPoints = s.basePoints + s.penaltyPoints;
+      }
+
+      standingsList.sort((a, b) {
+        // Sort by:
+        // 1) Total points (desc)
+        // 2) Wins (desc)
+        // 3) Driver name (asc)
+        if (b.totalPoints != a.totalPoints) {
+          return b.totalPoints.compareTo(a.totalPoints);
+        }
+        if (b.wins != a.wins) {
+          return b.wins.compareTo(a.wins);
+        }
+        return a.driverName.compareTo(b.driverName);
+      });
 
       setState(() {
         _standings = standingsList;
@@ -145,7 +192,7 @@ class _StandingsPageState extends State<StandingsPage> {
   }
 
   int _pointsForFinish(int position) {
-    // Simple F1-style scoring for top 10; adjust later if needed
+    // F1-style scoring for top 10; adjust later if needed
     switch (position) {
       case 1:
         return 25;
@@ -195,14 +242,20 @@ class _StandingsPageState extends State<StandingsPage> {
                           final standing = _standings[index];
                           final position = index + 1;
 
+                          final base = standing.basePoints;
+                          final pen = standing.penaltyPoints;
+                          final total = standing.totalPoints;
+
+                          // e.g. "Points: 36 (Base 40, Penalties -4) • Wins: 2"
+                          final subtitle =
+                              'Points: $total (Base $base, Penalties $pen) • Wins: ${standing.wins}';
+
                           return ListTile(
                             leading: CircleAvatar(
                               child: Text(position.toString()),
                             ),
                             title: Text(standing.driverName),
-                            subtitle: Text(
-                              'Points: ${standing.totalPoints} • Wins: ${standing.wins}',
-                            ),
+                            subtitle: Text(subtitle),
                           );
                         },
                       ),
@@ -214,13 +267,21 @@ class _StandingsPageState extends State<StandingsPage> {
 class _DriverStanding {
   final String driverId;
   final String driverName;
+  int basePoints;
+  int penaltyPoints;
   int totalPoints;
   int wins;
 
   _DriverStanding({
     required this.driverId,
     required this.driverName,
-    required this.totalPoints,
-    required this.wins,
+    // ignore: unused_element_parameter
+    this.basePoints = 0,
+    // ignore: unused_element_parameter
+    this.penaltyPoints = 0,
+    // ignore: unused_element_parameter
+    this.totalPoints = 0,
+    // ignore: unused_element_parameter
+    this.wins = 0,
   });
 }

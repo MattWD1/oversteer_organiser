@@ -1,3 +1,5 @@
+// lib/screens/events_page.dart
+
 import 'package:flutter/material.dart';
 
 import '../models/league.dart';
@@ -8,8 +10,10 @@ import '../repositories/event_repository.dart';
 import '../repositories/driver_repository.dart';
 import '../repositories/session_result_repository.dart';
 import '../repositories/validation_issue_repository.dart';
+import '../repositories/penalty_repository.dart';
 import 'session_page.dart';
 import 'issue_log_page.dart';
+import 'penalties_page.dart';
 
 class EventsPage extends StatefulWidget {
   final League league;
@@ -19,6 +23,7 @@ class EventsPage extends StatefulWidget {
   final DriverRepository driverRepository;
   final SessionResultRepository sessionResultRepository;
   final ValidationIssueRepository validationIssueRepository;
+  final PenaltyRepository penaltyRepository;
 
   const EventsPage({
     super.key,
@@ -29,6 +34,7 @@ class EventsPage extends StatefulWidget {
     required this.driverRepository,
     required this.sessionResultRepository,
     required this.validationIssueRepository,
+    required this.penaltyRepository,
   });
 
   @override
@@ -82,13 +88,28 @@ class _EventsPageState extends State<EventsPage> {
               return ListTile(
                 title: Text(event.name),
                 subtitle: Text(
-                  'Date: ${event.date.day}/${event.date.month}/${event.date.year}',
+                  '${event.date.toLocal()}',
                 ),
                 trailing: Row(
                   mainAxisSize: MainAxisSize.min,
                   children: [
                     IconButton(
-                      tooltip: 'Issue log',
+                      tooltip: 'Penalties',
+                      icon: const Icon(Icons.gavel_outlined),
+                      onPressed: () {
+                        Navigator.of(context).push(
+                          MaterialPageRoute(
+                            builder: (_) => PenaltiesPage(
+                              event: event,
+                              driverRepository: widget.driverRepository,
+                              penaltyRepository: widget.penaltyRepository,
+                            ),
+                          ),
+                        );
+                      },
+                    ),
+                    IconButton(
+                      tooltip: 'View validation issues',
                       icon: const Icon(Icons.warning_amber_outlined),
                       onPressed: () {
                         Navigator.of(context).push(

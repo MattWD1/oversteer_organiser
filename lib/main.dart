@@ -7,48 +7,30 @@ import 'repositories/event_repository.dart';
 import 'repositories/driver_repository.dart';
 import 'repositories/session_result_repository.dart';
 import 'repositories/validation_issue_repository.dart';
+import 'repositories/penalty_repository.dart';
 
 void main() {
-  // Create repositories once for the whole app
-  final leagueRepository = InMemoryLeagueRepository();
-  final competitionRepository = InMemoryCompetitionRepository();
-  final eventRepository = InMemoryEventRepository();
-  final driverRepository = InMemoryDriverRepository();
-  final sessionResultRepository = SessionResultRepository();
-  final validationIssueRepository = ValidationIssueRepository();
-
-  runApp(
-    OversteerApp(
-      leagueRepository: leagueRepository,
-      competitionRepository: competitionRepository,
-      eventRepository: eventRepository,
-      driverRepository: driverRepository,
-      sessionResultRepository: sessionResultRepository,
-      validationIssueRepository: validationIssueRepository,
-    ),
-  );
+  runApp(const OversteerApp());
 }
 
 class OversteerApp extends StatelessWidget {
-  final LeagueRepository leagueRepository;
-  final CompetitionRepository competitionRepository;
-  final EventRepository eventRepository;
-  final DriverRepository driverRepository;
-  final SessionResultRepository sessionResultRepository;
-  final ValidationIssueRepository validationIssueRepository;
-
-  const OversteerApp({
-    super.key,
-    required this.leagueRepository,
-    required this.competitionRepository,
-    required this.eventRepository,
-    required this.driverRepository,
-    required this.sessionResultRepository,
-    required this.validationIssueRepository,
-  });
+  const OversteerApp({super.key});
 
   @override
   Widget build(BuildContext context) {
+    // Core repositories
+    final leagueRepository = InMemoryLeagueRepository();
+    final competitionRepository = InMemoryCompetitionRepository();
+    final eventRepository = InMemoryEventRepository();
+    final driverRepository = InMemoryDriverRepository();
+
+    // These are simple concrete classes in your project
+    final sessionResultRepository = SessionResultRepository();
+    final validationIssueRepository = ValidationIssueRepository();
+
+    // Penalties use an in-memory implementation
+    final penaltyRepository = InMemoryPenaltyRepository();
+
     return MaterialApp(
       title: 'Oversteer Organiser',
       debugShowCheckedModeBanner: false,
@@ -63,6 +45,7 @@ class OversteerApp extends StatelessWidget {
         driverRepository: driverRepository,
         sessionResultRepository: sessionResultRepository,
         validationIssueRepository: validationIssueRepository,
+        penaltyRepository: penaltyRepository,
       ),
     );
   }

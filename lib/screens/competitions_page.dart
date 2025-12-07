@@ -7,6 +7,7 @@ import '../repositories/event_repository.dart';
 import '../repositories/driver_repository.dart';
 import '../repositories/session_result_repository.dart';
 import '../repositories/validation_issue_repository.dart';
+import '../repositories/penalty_repository.dart';
 import 'divisions_page.dart';
 
 class CompetitionsPage extends StatefulWidget {
@@ -16,6 +17,7 @@ class CompetitionsPage extends StatefulWidget {
   final DriverRepository driverRepository;
   final SessionResultRepository sessionResultRepository;
   final ValidationIssueRepository validationIssueRepository;
+  final PenaltyRepository penaltyRepository;
 
   const CompetitionsPage({
     super.key,
@@ -25,6 +27,7 @@ class CompetitionsPage extends StatefulWidget {
     required this.driverRepository,
     required this.sessionResultRepository,
     required this.validationIssueRepository,
+    required this.penaltyRepository,
   });
 
   @override
@@ -37,8 +40,8 @@ class _CompetitionsPageState extends State<CompetitionsPage> {
   @override
   void initState() {
     super.initState();
-    _futureCompetitions = widget.competitionRepository
-        .getCompetitionsForLeague(widget.league.id);
+    _futureCompetitions =
+        widget.competitionRepository.getCompetitionsForLeague(widget.league.id);
   }
 
   @override
@@ -66,7 +69,7 @@ class _CompetitionsPageState extends State<CompetitionsPage> {
 
           if (competitions.isEmpty) {
             return const Center(
-              child: Text('No competitions found for this league.'),
+              child: Text('No competitions for this league.'),
             );
           }
 
@@ -77,7 +80,7 @@ class _CompetitionsPageState extends State<CompetitionsPage> {
 
               return ListTile(
                 title: Text(competition.name),
-                subtitle: Text('Season: ${competition.seasonName ?? 'N/A'}'),
+                subtitle: Text(competition.seasonName ?? ''),
                 trailing: const Icon(Icons.chevron_right),
                 onTap: () {
                   Navigator.of(context).push(
@@ -92,6 +95,7 @@ class _CompetitionsPageState extends State<CompetitionsPage> {
                             widget.sessionResultRepository,
                         validationIssueRepository:
                             widget.validationIssueRepository,
+                        penaltyRepository: widget.penaltyRepository,
                       ),
                     ),
                   );

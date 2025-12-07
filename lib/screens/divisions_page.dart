@@ -8,6 +8,7 @@ import '../repositories/event_repository.dart';
 import '../repositories/driver_repository.dart';
 import '../repositories/session_result_repository.dart';
 import '../repositories/validation_issue_repository.dart';
+import '../repositories/penalty_repository.dart';
 import 'events_page.dart';
 import 'standings_page.dart';
 
@@ -19,6 +20,7 @@ class DivisionsPage extends StatefulWidget {
   final DriverRepository driverRepository;
   final SessionResultRepository sessionResultRepository;
   final ValidationIssueRepository validationIssueRepository;
+  final PenaltyRepository penaltyRepository;
 
   const DivisionsPage({
     super.key,
@@ -29,6 +31,7 @@ class DivisionsPage extends StatefulWidget {
     required this.driverRepository,
     required this.sessionResultRepository,
     required this.validationIssueRepository,
+    required this.penaltyRepository,
   });
 
   @override
@@ -98,6 +101,7 @@ class _DivisionsPageState extends State<DivisionsPage> {
                               driverRepository: widget.driverRepository,
                               sessionResultRepository:
                                   widget.sessionResultRepository,
+                              penaltyRepository: widget.penaltyRepository,
                             ),
                           ),
                         );
@@ -119,6 +123,7 @@ class _DivisionsPageState extends State<DivisionsPage> {
                             widget.sessionResultRepository,
                         validationIssueRepository:
                             widget.validationIssueRepository,
+                        penaltyRepository: widget.penaltyRepository,
                       ),
                     ),
                   );
