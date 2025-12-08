@@ -784,6 +784,7 @@ class _SessionPageState extends State<SessionPage> {
             ),
             const SizedBox(height: 12),
             DropdownButtonFormField<String>(
+              // ignore: deprecated_member_use
               value: _selectedFastestLapDriverId,
               decoration: const InputDecoration(
                 labelText: 'Fastest lap – driver',
@@ -824,6 +825,7 @@ class _SessionPageState extends State<SessionPage> {
   }
 
   Widget _buildDriverRow(Driver driver) {
+    // ignore: unused_local_variable
     final result = _resultsByDriverId[driver.id]!;
 
     final gridController = _gridControllers[driver.id]!;
