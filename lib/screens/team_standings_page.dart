@@ -267,7 +267,8 @@ class _TeamStandingsPageState extends State<TeamStandingsPage> {
               ? Center(child: Text(_error!))
               : _standings.isEmpty
                   ? const Center(
-                      child: Text('No classified results yet for this division.'),
+                      child:
+                          Text('No classified results yet for this division.'),
                     )
                   : RefreshIndicator(
                       onRefresh: _loadStandings,
