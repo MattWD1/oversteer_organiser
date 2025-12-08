@@ -149,3 +149,34 @@
   - Left the logic as-is, but documented that:
     - The Session summary is a **live editing view**.
     - Standings only reflect **saved, fully validated** results.
+
+    ---
+
+## Issue 12 – Session results ignored time penalties
+
+- **Date:** 2025-12-08  
+- **Area:** SessionPage / Results summary  
+- **Description:** After introducing time penalties, the division standings correctly applied penalties when calculating adjusted race times, but the Session results screen still displayed the “Current results” block using raw race times only. This meant that if a driver received a time penalty (e.g. +10s), the standings order changed but the on-screen race results summary did not, which was confusing for organisers.  
+- **Cause:** `SessionPage` was not aware of `PenaltyRepository` and built its “Current results (by time)” section purely from `SessionResult.raceTimeMillis` without adding any `Time` penalties.  
+- **Fix:** Injected `PenaltyRepository` into `SessionPage` and updated the summary logic to:
+  - Aggregate time penalties (`type == 'Time'`) per driver in seconds.
+  - Compute an **adjustedTimeMs = baseTimeMs + (penaltySeconds × 1000)** for each driver.
+  - Sort by adjusted time to derive the true classification.
+  - Display gaps relative to the adjusted leader and annotate rows that include penalties (e.g. “(includes +10s)”).  
+  Now both the standings page and the Session results screen reflect the same post-penalty classification.
+
+---
+
+## Issue 13 – Race time input was too free-form and error-prone
+
+- **Date:** 2025-12-08  
+- **Area:** SessionPage / Race time input  
+- **Description:** Race times were entered as a free-form text field with only example hints. This made it easy to accidentally enter an invalid format (e.g. “74.40.727”, missing separators), leading to parsing failures or inconsistent data entry when entering full race times for all drivers.  
+- **Cause:** The race time `TextField` accepted any text and relied entirely on `_parseRaceTimeMillis` to interpret the input, without constraining the shape of the input.  
+- **Fix:** Introduced a custom `RaceTimeInputFormatter` that:
+  - Strips non-digits.
+  - Enforces exactly 8 digits (H MM SS mmm).
+  - Automatically formats the input as `H:MM:SS.mmm` while the user types.  
+  The field now uses `keyboardType: TextInputType.number` with this formatter, and the hint text shows `_ : __ : __ . ___ (H:MM:SS.mmm)`. This makes the race time input consistent and significantly reduces the chance of format errors.
+
+
