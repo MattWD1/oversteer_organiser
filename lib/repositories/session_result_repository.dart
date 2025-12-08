@@ -3,22 +3,46 @@
 import '../models/session_result.dart';
 
 class SessionResultRepository {
-  final Map<String, List<SessionResult>> _resultsByEventId = {};
+  // key: eventId, value: list of results for that event
+  final Map<String, List<SessionResult>> _resultsByEvent = {};
 
-  /// Returns a copy of the results list for the given eventId.
   List<SessionResult> getResultsForEvent(String eventId) {
-    final list = _resultsByEventId[eventId];
-    if (list == null) return [];
-    return List<SessionResult>.from(list);
+    final existing = _resultsByEvent[eventId] ?? [];
+    // Return defensive copies
+    return existing
+        .map(
+          (r) => SessionResult(
+            driverId: r.driverId,
+            gridPosition: r.gridPosition,
+            finishPosition: r.finishPosition,
+            raceTimeMillis: r.raceTimeMillis,
+            hasFastestLap: r.hasFastestLap,
+            fastestLapMillis: r.fastestLapMillis,
+            poleLapMillis: r.poleLapMillis,
+          ),
+        )
+        .toList();
   }
 
-  /// Saves the full set of results for a given event.
+  /// Replace all results for the given event (e.g. after saving from SessionPage)
   void saveResultsForEvent(String eventId, List<SessionResult> results) {
-    _resultsByEventId[eventId] = List<SessionResult>.from(results);
+    _resultsByEvent[eventId] = results
+        .map(
+          (r) => SessionResult(
+            driverId: r.driverId,
+            gridPosition: r.gridPosition,
+            finishPosition: r.finishPosition,
+            raceTimeMillis: r.raceTimeMillis,
+            hasFastestLap: r.hasFastestLap,
+            fastestLapMillis: r.fastestLapMillis,
+            poleLapMillis: r.poleLapMillis,
+          ),
+        )
+        .toList();
   }
 
-  /// Clears any stored results for the event.
+  /// Optional helper if you ever want to clear results for an event
   void clearResultsForEvent(String eventId) {
-    _resultsByEventId.remove(eventId);
+    _resultsByEvent.remove(eventId);
   }
 }

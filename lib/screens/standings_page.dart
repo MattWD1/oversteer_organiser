@@ -319,6 +319,12 @@ class _StandingsPageState extends State<StandingsPage> {
                                 MaterialPageRoute(
                                   builder: (_) => DriverProfilePage(
                                     driver: driver,
+                                    division: widget.division,
+                                    eventRepository: widget.eventRepository,
+                                    sessionResultRepository:
+                                        widget.sessionResultRepository,
+                                    penaltyRepository:
+                                        widget.penaltyRepository,
                                   ),
                                 ),
                               );

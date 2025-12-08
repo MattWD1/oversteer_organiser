@@ -43,6 +43,12 @@ class _SessionPageState extends State<SessionPage> {
   final Map<String, TextEditingController> _finishControllers = {};
   final Map<String, TextEditingController> _timeControllers = {};
 
+  // New: pole & fastest lap
+  final TextEditingController _poleLapTimeController = TextEditingController();
+  final TextEditingController _fastestLapTimeController =
+      TextEditingController();
+  String? _selectedFastestLapDriverId;
+
   @override
   void initState() {
     super.initState();
@@ -66,11 +72,19 @@ class _SessionPageState extends State<SessionPage> {
         ..addAll(drivers);
 
       _resultsByDriverId.clear();
+      _gridControllers.clear();
+      _finishControllers.clear();
+      _timeControllers.clear();
+
+      _poleLapTimeController.clear();
+      _fastestLapTimeController.clear();
+      _selectedFastestLapDriverId = null;
 
       final existingByDriverId = {
         for (final r in existingResults) r.driverId: r,
       };
 
+      // Build per-driver result objects and controllers
       for (final driver in _drivers) {
         final existing = existingByDriverId[driver.id];
 
@@ -79,6 +93,9 @@ class _SessionPageState extends State<SessionPage> {
           gridPosition: existing?.gridPosition,
           finishPosition: existing?.finishPosition,
           raceTimeMillis: existing?.raceTimeMillis,
+          hasFastestLap: existing?.hasFastestLap ?? false,
+          fastestLapMillis: existing?.fastestLapMillis,
+          poleLapMillis: existing?.poleLapMillis,
         );
 
         _resultsByDriverId[driver.id] = result;
@@ -94,6 +111,31 @@ class _SessionPageState extends State<SessionPage> {
               ? _formatAbsoluteTime(existing!.raceTimeMillis!)
               : '',
         );
+      }
+
+      // If an existing fastest lap is stored, restore selection + time
+      for (final r in existingResults) {
+        if (r.hasFastestLap && _drivers.any((d) => d.id == r.driverId)) {
+          _selectedFastestLapDriverId = r.driverId;
+          if (r.fastestLapMillis != null) {
+            _fastestLapTimeController.text =
+                _formatAbsoluteTime(r.fastestLapMillis!);
+          }
+          break;
+        }
+      }
+
+      // If an existing pole lap time is stored, restore it
+      SessionResult? existingPole;
+      for (final r in existingResults) {
+        if (r.poleLapMillis != null) {
+          existingPole = r;
+          break;
+        }
+      }
+      if (existingPole != null && existingPole.poleLapMillis != null) {
+        _poleLapTimeController.text =
+            _formatAbsoluteTime(existingPole.poleLapMillis!);
       }
 
       setState(() {
@@ -315,6 +357,84 @@ class _SessionPageState extends State<SessionPage> {
         }
       }
 
+      // 5) Fastest lap & pole lap (new)
+      // Reset flags
+      for (final r in results) {
+        r.hasFastestLap = false;
+        r.fastestLapMillis = null;
+        r.poleLapMillis = null;
+      }
+
+      // Fastest lap
+      final fastestDriverId = _selectedFastestLapDriverId;
+      final fastestText = _fastestLapTimeController.text.trim();
+      if (fastestDriverId != null && fastestText.isNotEmpty) {
+        final fastestMs = _parseRaceTimeMillis(fastestText);
+        if (fastestMs == null) {
+          issues.add(
+            _buildIssue(
+              eventId: widget.event.id,
+              driverId: fastestDriverId,
+              code: 'INVALID_FASTEST_LAP_TIME',
+              message:
+                  'Fastest lap time format is invalid. Please use H:MM:SS.mmm.',
+            ),
+          );
+        } else {
+          final result = _resultsByDriverId[fastestDriverId];
+          if (result == null) {
+            issues.add(
+              _buildIssue(
+                eventId: widget.event.id,
+                driverId: fastestDriverId,
+                code: 'FASTEST_LAP_DRIVER_NOT_FOUND',
+                message:
+                    'Selected fastest lap driver does not have a race result.',
+              ),
+            );
+          } else {
+            result.hasFastestLap = true;
+            result.fastestLapMillis = fastestMs;
+          }
+        }
+      }
+
+      // Pole lap
+      final poleText = _poleLapTimeController.text.trim();
+      if (poleText.isNotEmpty) {
+        final poleMs = _parseRaceTimeMillis(poleText);
+        if (poleMs == null) {
+          issues.add(
+            _buildIssue(
+              eventId: widget.event.id,
+              code: 'INVALID_POLE_LAP_TIME',
+              message:
+                  'Pole lap time format is invalid. Please use H:MM:SS.mmm.',
+            ),
+          );
+        } else {
+          SessionResult? poleResult;
+          for (final r in results) {
+            if (r.gridPosition == 1) {
+              poleResult = r;
+              break;
+            }
+          }
+          if (poleResult == null) {
+            issues.add(
+              _buildIssue(
+                eventId: widget.event.id,
+                code: 'POLE_DRIVER_NOT_FOUND',
+                message:
+                    'Cannot assign a pole lap time because no driver has grid position 1 yet.',
+              ),
+            );
+          } else {
+            poleResult.poleLapMillis = poleMs;
+          }
+        }
+      }
+
       if (issues.isNotEmpty) {
         widget.validationIssueRepository
             .replaceIssuesForEvent(widget.event.id, issues);
@@ -525,6 +645,8 @@ class _SessionPageState extends State<SessionPage> {
     for (final c in _timeControllers.values) {
       c.dispose();
     }
+    _poleLapTimeController.dispose();
+    _fastestLapTimeController.dispose();
     super.dispose();
   }
 
@@ -605,6 +727,8 @@ class _SessionPageState extends State<SessionPage> {
             child: ListView(
               padding: const EdgeInsets.all(16),
               children: [
+                _buildQualifyingAndFastestLapSection(),
+                const SizedBox(height: 16),
                 ..._drivers.map(_buildDriverRow),
                 const SizedBox(height: 16),
                 _buildCurrentResultsSummary(),
@@ -630,8 +754,76 @@ class _SessionPageState extends State<SessionPage> {
     );
   }
 
+  Widget _buildQualifyingAndFastestLapSection() {
+    return Card(
+      margin: const EdgeInsets.only(bottom: 12),
+      child: Padding(
+        padding: const EdgeInsets.all(12),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            const Text(
+              'Qualifying & fastest lap',
+              style: TextStyle(
+                fontWeight: FontWeight.bold,
+              ),
+            ),
+            const SizedBox(height: 12),
+            TextField(
+              controller: _poleLapTimeController,
+              keyboardType: TextInputType.number,
+              inputFormatters: [
+                RaceTimeInputFormatter(),
+              ],
+              decoration: const InputDecoration(
+                labelText: 'Pole lap time',
+                hintText: '_:__:__.___  (H:MM:SS.mmm)',
+                helperText: 'Example: 1:14:40.727',
+                border: OutlineInputBorder(),
+              ),
+            ),
+            const SizedBox(height: 12),
+            DropdownButtonFormField<String>(
+              value: _selectedFastestLapDriverId,
+              decoration: const InputDecoration(
+                labelText: 'Fastest lap – driver',
+                border: OutlineInputBorder(),
+              ),
+              items: _drivers
+                  .map(
+                    (d) => DropdownMenuItem<String>(
+                      value: d.id,
+                      child: Text(d.name),
+                    ),
+                  )
+                  .toList(),
+              onChanged: (value) {
+                setState(() {
+                  _selectedFastestLapDriverId = value;
+                });
+              },
+            ),
+            const SizedBox(height: 8),
+            TextField(
+              controller: _fastestLapTimeController,
+              keyboardType: TextInputType.number,
+              inputFormatters: [
+                RaceTimeInputFormatter(),
+              ],
+              decoration: const InputDecoration(
+                labelText: 'Fastest lap time',
+                hintText: '_:__:__.___  (H:MM:SS.mmm)',
+                helperText: 'Example: 1:17:09.832',
+                border: OutlineInputBorder(),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
   Widget _buildDriverRow(Driver driver) {
-    // ignore: unused_local_variable
     final result = _resultsByDriverId[driver.id]!;
 
     final gridController = _gridControllers[driver.id]!;
