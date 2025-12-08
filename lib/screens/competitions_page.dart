@@ -56,6 +56,18 @@ class _CompetitionsPageState extends State<CompetitionsPage> {
         widget.competitionRepository.getCompetitionsForLeague(widget.league.id);
   }
 
+  // Safely read teamName if it exists on Driver, otherwise "Unknown Team"
+  String _getTeamName(Driver driver) {
+    try {
+      final dynamic d = driver;
+      final value = d.teamName;
+      if (value is String && value.isNotEmpty) {
+        return value;
+      }
+    } catch (_) {}
+    return 'Unknown Team';
+  }
+
   List<Competition> _sortedCompetitions(List<Competition> source) {
     final competitions = List<Competition>.from(source);
 
@@ -64,8 +76,7 @@ class _CompetitionsPageState extends State<CompetitionsPage> {
         (a, b) => a.name.toLowerCase().compareTo(b.name.toLowerCase()),
       );
     } else {
-      // "Date" currently keeps repository order.
-      // When a real date field is added to Competition, hook it up here.
+      // When you add a real date field to Competition, hook the sort here.
     }
 
     return competitions;
@@ -98,15 +109,7 @@ class _CompetitionsPageState extends State<CompetitionsPage> {
     }
   }
 
-  /// Computes the Overall Constructors Championship for the selected league.
-  ///
-  /// Logic:
-  /// - For each competition in the league
-  ///   - For each division in that competition
-  ///     - For each event in that division
-  ///       - Use adjusted race times (time penalties included) to classify drivers
-  ///       - Convert driver results → team points
-  ///       - Apply points penalties at team level
+  /// Overall Constructors Championship for the whole league
   Future<List<_LeagueTeamStanding>> _computeLeagueConstructors() async {
     try {
       final competitions = await widget.competitionRepository
@@ -119,7 +122,6 @@ class _CompetitionsPageState extends State<CompetitionsPage> {
       final Map<String, _LeagueTeamStanding> standingsMap = {};
 
       for (final competition in competitions) {
-        // Assumes CompetitionRepository provides divisions per competition.
         final List<Division> divisions = await widget.competitionRepository
             .getDivisionsForCompetition(competition.id);
 
@@ -142,7 +144,6 @@ class _CompetitionsPageState extends State<CompetitionsPage> {
               for (final d in eventDrivers) d.id: d,
             };
 
-            // Time & points penalties for this event
             final List<Penalty> eventPenalties =
                 widget.penaltyRepository.getPenaltiesForEvent(event.id);
 
@@ -159,29 +160,20 @@ class _CompetitionsPageState extends State<CompetitionsPage> {
               }
             }
 
-            // Build per-event adjusted times at driver level
             final List<_LeagueEventClassificationEntry> eventEntries = [];
 
             for (final result in results) {
               final baseTimeMs = result.raceTimeMillis;
               if (baseTimeMs == null) {
-                // No race time, cannot classify fairly
                 continue;
               }
 
               final driverId = result.driverId;
               final driver = driverById[driverId];
 
-              final String teamName;
-              if (driver == null) {
-                teamName = 'Unknown Team';
-              } else {
-                final dynamic maybeTeamName = (driver as dynamic).teamName;
-                teamName = (maybeTeamName is String &&
-                        maybeTeamName.isNotEmpty)
-                    ? maybeTeamName
-                    : 'Unknown Team';
-              }
+              final teamName = driver != null
+                  ? _getTeamName(driver)
+                  : 'Unknown Team';
 
               final timePenSec = timePenaltySecondsByDriver[driverId] ?? 0;
               final adjustedTimeMs = baseTimeMs + timePenSec * 1000;
@@ -201,12 +193,10 @@ class _CompetitionsPageState extends State<CompetitionsPage> {
               continue;
             }
 
-            // Sort by adjusted time (best = first)
             eventEntries.sort(
               (a, b) => a.adjustedTimeMs.compareTo(b.adjustedTimeMs),
             );
 
-            // Convert driver results → team points
             for (var index = 0; index < eventEntries.length; index++) {
               final entry = eventEntries[index];
               final eventPos = index + 1;
@@ -218,33 +208,24 @@ class _CompetitionsPageState extends State<CompetitionsPage> {
               );
 
               standing.basePoints += basePoints;
-
               if (eventPos == 1) {
                 standing.wins += 1;
               }
             }
 
-            // Apply points penalties at team level
             pointsPenaltyByDriver.forEach((driverId, penaltyPoints) {
               final driver = driverById[driverId];
 
-              final String teamName;
-              if (driver == null) {
-                teamName = 'Unknown Team';
-              } else {
-                final dynamic maybeTeamName = (driver as dynamic).teamName;
-                teamName = (maybeTeamName is String &&
-                        maybeTeamName.isNotEmpty)
-                    ? maybeTeamName
-                    : 'Unknown Team';
-              }
+              final teamName = driver != null
+                  ? _getTeamName(driver)
+                  : 'Unknown Team';
 
               final standing = standingsMap.putIfAbsent(
                 teamName,
                 () => _LeagueTeamStanding(teamName: teamName),
               );
 
-              standing.penaltyPoints += penaltyPoints; // typically negative
+              standing.penaltyPoints += penaltyPoints;
             });
           }
         }
@@ -252,15 +233,10 @@ class _CompetitionsPageState extends State<CompetitionsPage> {
 
       final standingsList = standingsMap.values.toList();
 
-      // Compute final totals
       for (final s in standingsList) {
         s.totalPoints = s.basePoints + s.penaltyPoints;
       }
 
-      // Sort teams:
-      // 1) Total points (desc)
-      // 2) Wins (desc)
-      // 3) Team name (asc)
       standingsList.sort((a, b) {
         if (b.totalPoints != a.totalPoints) {
           return b.totalPoints.compareTo(a.totalPoints);
@@ -307,10 +283,8 @@ class _CompetitionsPageState extends State<CompetitionsPage> {
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             Padding(
-              padding: const EdgeInsets.symmetric(
-                horizontal: 16,
-                vertical: 8,
-              ),
+              padding:
+                  const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
@@ -454,6 +428,8 @@ class _CompetitionsPageState extends State<CompetitionsPage> {
           ? _buildCompetitionsTab()
           : _buildRankingTab(),
       bottomNavigationBar: BottomNavigationBar(
+        selectedItemColor: Colors.amber,
+        unselectedItemColor: Colors.grey,
         currentIndex: _currentTabIndex,
         onTap: (index) {
           setState(() {
@@ -490,7 +466,6 @@ class _LeagueTeamStanding {
         wins = 0;
 }
 
-/// Internal helper for per-event classification at league level.
 class _LeagueEventClassificationEntry {
   final String driverId;
   final String driverName;

@@ -1,5 +1,3 @@
-// lib/screens/team_standings_page.dart
-
 import 'package:flutter/material.dart';
 
 import '../models/league.dart';
@@ -50,6 +48,17 @@ class _TeamStandingsPageState extends State<TeamStandingsPage> {
     _loadStandings();
   }
 
+  String _getTeamName(Driver driver) {
+    try {
+      final dynamic d = driver;
+      final value = d.teamName;
+      if (value is String && value.isNotEmpty) {
+        return value;
+      }
+    } catch (_) {}
+    return 'Unknown Team';
+  }
+
   Future<void> _loadStandings() async {
     setState(() {
       _isLoading = true;
@@ -71,7 +80,6 @@ class _TeamStandingsPageState extends State<TeamStandingsPage> {
 
       final Map<String, _TeamStanding> standingsMap = {};
 
-      // --------- PART A: Base points from adjusted race results ---------
       for (final event in events) {
         final List<SessionResult> results =
             widget.sessionResultRepository.getResultsForEvent(event.id);
@@ -87,7 +95,6 @@ class _TeamStandingsPageState extends State<TeamStandingsPage> {
           for (final d in eventDrivers) d.id: d,
         };
 
-        // Time & points penalties for this event
         final List<Penalty> eventPenalties =
             widget.penaltyRepository.getPenaltiesForEvent(event.id);
 
@@ -104,31 +111,19 @@ class _TeamStandingsPageState extends State<TeamStandingsPage> {
           }
         }
 
-        // Build per-event adjusted times at driver level
         final List<_EventClassificationEntry> eventEntries = [];
 
         for (final result in results) {
           final baseTimeMs = result.raceTimeMillis;
           if (baseTimeMs == null) {
-            // No race time, cannot classify fairly
             continue;
           }
 
           final driverId = result.driverId;
           final driver = driverById[driverId];
 
-          final String teamName;
-          // Assumes Driver has a teamName field; adjust if your model uses something else.
-          if (driver == null) {
-            teamName = 'Unknown Team';
-          } else {
-            // If driver.teamName is nullable or named differently, tweak this line.
-            // e.g. final dTeam = driver.teamName ?? 'Unknown Team';
-            final dynamic maybeTeamName = (driver as dynamic).teamName;
-            teamName = (maybeTeamName is String && maybeTeamName.isNotEmpty)
-                ? maybeTeamName
-                : 'Unknown Team';
-          }
+          final teamName =
+              driver != null ? _getTeamName(driver) : 'Unknown Team';
 
           final timePenSec = timePenaltySecondsByDriver[driverId] ?? 0;
           final adjustedTimeMs = baseTimeMs + timePenSec * 1000;
@@ -148,12 +143,10 @@ class _TeamStandingsPageState extends State<TeamStandingsPage> {
           continue;
         }
 
-        // Sort event entries by adjusted time ascending (best = first)
         eventEntries.sort(
           (a, b) => a.adjustedTimeMs.compareTo(b.adjustedTimeMs),
         );
 
-        // Assign final event positions based on adjusted times
         for (var index = 0; index < eventEntries.length; index++) {
           final entry = eventEntries[index];
           final eventPos = index + 1;
@@ -166,46 +159,32 @@ class _TeamStandingsPageState extends State<TeamStandingsPage> {
 
           standing.basePoints += basePoints;
 
-          // If this driver won the race, give the team a "win"
           if (eventPos == 1) {
             standing.wins += 1;
           }
         }
 
-        // Apply any points penalties for this event at team level
         pointsPenaltyByDriver.forEach((driverId, penaltyPoints) {
           final driver = driverById[driverId];
 
-          final String teamName;
-          if (driver == null) {
-            teamName = 'Unknown Team';
-          } else {
-            final dynamic maybeTeamName = (driver as dynamic).teamName;
-            teamName = (maybeTeamName is String && maybeTeamName.isNotEmpty)
-                ? maybeTeamName
-                : 'Unknown Team';
-          }
+          final teamName =
+              driver != null ? _getTeamName(driver) : 'Unknown Team';
 
           final standing = standingsMap.putIfAbsent(
             teamName,
             () => _TeamStanding(teamName: teamName),
           );
 
-          standing.penaltyPoints += penaltyPoints; // typically negative
+          standing.penaltyPoints += penaltyPoints;
         });
       }
 
       final standingsList = standingsMap.values.toList();
 
-      // Compute final totals
       for (final s in standingsList) {
         s.totalPoints = s.basePoints + s.penaltyPoints;
       }
 
-      // Sort teams:
-      // 1) Total points (desc)
-      // 2) Wins (desc)
-      // 3) Team name (asc)
       standingsList.sort((a, b) {
         if (b.totalPoints != a.totalPoints) {
           return b.totalPoints.compareTo(a.totalPoints);
@@ -267,8 +246,8 @@ class _TeamStandingsPageState extends State<TeamStandingsPage> {
               ? Center(child: Text(_error!))
               : _standings.isEmpty
                   ? const Center(
-                      child:
-                          Text('No classified results yet for this division.'),
+                      child: Text(
+                          'No classified results yet for this division.'),
                     )
                   : RefreshIndicator(
                       onRefresh: _loadStandings,
@@ -314,7 +293,6 @@ class _TeamStanding {
         wins = 0;
 }
 
-/// Internal helper to represent classification for a single event at driver level.
 class _EventClassificationEntry {
   final String driverId;
   final String driverName;
