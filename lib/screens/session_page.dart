@@ -9,6 +9,7 @@ import '../repositories/driver_repository.dart';
 import '../repositories/session_result_repository.dart';
 import '../repositories/validation_issue_repository.dart';
 import '../repositories/penalty_repository.dart';
+import 'validation_issues_page.dart';
 
 class SessionPage extends StatefulWidget {
   final Event event;
@@ -330,7 +331,8 @@ class _SessionPageState extends State<SessionPage> {
                   children: issues
                       .map(
                         (i) => ListTile(
-                          leading: const Icon(Icons.warning_amber_outlined),
+                          leading:
+                              const Icon(Icons.warning_amber_outlined),
                           title: Text(i.message),
                           subtitle: Text(i.code),
                         ),
@@ -408,13 +410,13 @@ class _SessionPageState extends State<SessionPage> {
     final millis = duration.inMilliseconds % 1000;
 
     if (hours > 0) {
-      return '$hours:${minutes.toString().padLeft(2, '0')}:'
-          '${seconds.toString().padLeft(2, '0')}.'
-          '${millis.toString().padLeft(3, '0')}';
+      return '$hours:${minutes.toString().padLeft(2, '0')}:' // HH:MM:
+          '${seconds.toString().padLeft(2, '0')}.'           // SS.
+          '${millis.toString().padLeft(3, '0')}';            // mmm
     } else {
-      return '${minutes.toString().padLeft(1, '0')}:'
-          '${seconds.toString().padLeft(2, '0')}.'
-          '${millis.toString().padLeft(3, '0')}';
+      return '${minutes.toString().padLeft(1, '0')}:'        // M:
+          '${seconds.toString().padLeft(2, '0')}.'           // SS.
+          '${millis.toString().padLeft(3, '0')}';            // mmm
     }
   }
 
@@ -550,9 +552,48 @@ class _SessionPageState extends State<SessionPage> {
       );
     }
 
+    // get current issues for this event to show a badge if needed
+    final issues =
+        widget.validationIssueRepository.getIssuesForEvent(widget.event.id);
+
     return Scaffold(
       appBar: AppBar(
         title: Text('Results – ${widget.event.name}'),
+        actions: [
+          IconButton(
+            tooltip: 'View validation issues',
+            onPressed: () {
+              Navigator.of(context).push(
+                MaterialPageRoute(
+                  builder: (_) => ValidationIssuesPage(
+                    event: widget.event,
+                    validationIssueRepository:
+                        widget.validationIssueRepository,
+                  ),
+                ),
+              );
+            },
+            icon: Stack(
+              clipBehavior: Clip.none,
+              children: [
+                const Icon(Icons.report_problem_outlined),
+                if (issues.isNotEmpty)
+                  Positioned(
+                    right: -1,
+                    top: -1,
+                    child: Container(
+                      width: 8,
+                      height: 8,
+                      decoration: const BoxDecoration(
+                        color: Colors.red,
+                        shape: BoxShape.circle,
+                      ),
+                    ),
+                  ),
+              ],
+            ),
+          ),
+        ],
       ),
       body: Column(
         children: [
@@ -590,7 +631,6 @@ class _SessionPageState extends State<SessionPage> {
   }
 
   Widget _buildDriverRow(Driver driver) {
-    // ignore: unused_local_variable
     final result = _resultsByDriverId[driver.id]!;
 
     final gridController = _gridControllers[driver.id]!;
