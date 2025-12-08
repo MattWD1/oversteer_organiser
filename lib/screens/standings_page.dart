@@ -14,6 +14,7 @@ import '../repositories/driver_repository.dart';
 import '../repositories/session_result_repository.dart';
 import '../repositories/penalty_repository.dart';
 import 'team_standings_page.dart';
+import 'driver_profile_page.dart';
 
 class StandingsPage extends StatefulWidget {
   final League league;
@@ -45,6 +46,9 @@ class _StandingsPageState extends State<StandingsPage> {
 
   List<_DriverStanding> _standings = [];
 
+  // Keep a map of drivers so we can open a profile from standings.
+  final Map<String, Driver> _driversById = {};
+
   @override
   void initState() {
     super.initState();
@@ -56,6 +60,7 @@ class _StandingsPageState extends State<StandingsPage> {
       _isLoading = true;
       _error = null;
       _standings = [];
+      _driversById.clear();
     });
 
     try {
@@ -83,6 +88,12 @@ class _StandingsPageState extends State<StandingsPage> {
 
         final List<Driver> eventDrivers =
             await widget.driverRepository.getDriversForEvent(event.id);
+
+        // Store drivers globally so we can use them later for profiles.
+        for (final d in eventDrivers) {
+          _driversById[d.id] = d;
+        }
+
         final Map<String, Driver> driverById = {
           for (final d in eventDrivers) d.id: d,
         };
@@ -291,6 +302,27 @@ class _StandingsPageState extends State<StandingsPage> {
                             ),
                             title: Text(standing.driverName),
                             subtitle: Text(subtitle),
+                            onTap: () {
+                              final driver = _driversById[standing.driverId];
+                              if (driver == null) {
+                                ScaffoldMessenger.of(context).showSnackBar(
+                                  const SnackBar(
+                                    content: Text(
+                                      'Driver profile not available for this entry.',
+                                    ),
+                                  ),
+                                );
+                                return;
+                              }
+
+                              Navigator.of(context).push(
+                                MaterialPageRoute(
+                                  builder: (_) => DriverProfilePage(
+                                    driver: driver,
+                                  ),
+                                ),
+                              );
+                            },
                           );
                         },
                       ),
