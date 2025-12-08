@@ -33,6 +33,7 @@ class ValidationIssuesPage extends StatelessWidget {
           : ListView.separated(
               padding: const EdgeInsets.all(16),
               itemCount: issues.length,
+              // ignore: unnecessary_underscores
               separatorBuilder: (_, __) => const SizedBox(height: 8),
               itemBuilder: (context, index) {
                 final issue = issues[index];

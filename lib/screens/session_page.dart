@@ -631,6 +631,7 @@ class _SessionPageState extends State<SessionPage> {
   }
 
   Widget _buildDriverRow(Driver driver) {
+    // ignore: unused_local_variable
     final result = _resultsByDriverId[driver.id]!;
 
     final gridController = _gridControllers[driver.id]!;

@@ -1,4 +1,4 @@
-// lib/screens/standings_page.dart
+// lib/screens/team_standings_page.dart
 
 import 'package:flutter/material.dart';
 
@@ -13,9 +13,8 @@ import '../repositories/event_repository.dart';
 import '../repositories/driver_repository.dart';
 import '../repositories/session_result_repository.dart';
 import '../repositories/penalty_repository.dart';
-import 'team_standings_page.dart';
 
-class StandingsPage extends StatefulWidget {
+class TeamStandingsPage extends StatefulWidget {
   final League league;
   final Competition competition;
   final Division division;
@@ -24,7 +23,7 @@ class StandingsPage extends StatefulWidget {
   final SessionResultRepository sessionResultRepository;
   final PenaltyRepository penaltyRepository;
 
-  const StandingsPage({
+  const TeamStandingsPage({
     super.key,
     required this.league,
     required this.competition,
@@ -36,14 +35,14 @@ class StandingsPage extends StatefulWidget {
   });
 
   @override
-  State<StandingsPage> createState() => _StandingsPageState();
+  State<TeamStandingsPage> createState() => _TeamStandingsPageState();
 }
 
-class _StandingsPageState extends State<StandingsPage> {
+class _TeamStandingsPageState extends State<TeamStandingsPage> {
   bool _isLoading = true;
   String? _error;
 
-  List<_DriverStanding> _standings = [];
+  List<_TeamStanding> _standings = [];
 
   @override
   void initState() {
@@ -70,7 +69,7 @@ class _StandingsPageState extends State<StandingsPage> {
         return;
       }
 
-      final Map<String, _DriverStanding> standingsMap = {};
+      final Map<String, _TeamStanding> standingsMap = {};
 
       // --------- PART A: Base points from adjusted race results ---------
       for (final event in events) {
@@ -83,6 +82,7 @@ class _StandingsPageState extends State<StandingsPage> {
 
         final List<Driver> eventDrivers =
             await widget.driverRepository.getDriversForEvent(event.id);
+
         final Map<String, Driver> driverById = {
           for (final d in eventDrivers) d.id: d,
         };
@@ -104,7 +104,7 @@ class _StandingsPageState extends State<StandingsPage> {
           }
         }
 
-        // Build per-event adjusted times
+        // Build per-event adjusted times at driver level
         final List<_EventClassificationEntry> eventEntries = [];
 
         for (final result in results) {
@@ -116,7 +116,19 @@ class _StandingsPageState extends State<StandingsPage> {
 
           final driverId = result.driverId;
           final driver = driverById[driverId];
-          final driverName = driver?.name ?? 'Unknown driver';
+
+          final String teamName;
+          // Assumes Driver has a teamName field; adjust if your model uses something else.
+          if (driver == null) {
+            teamName = 'Unknown Team';
+          } else {
+            // If driver.teamName is nullable or named differently, tweak this line.
+            // e.g. final dTeam = driver.teamName ?? 'Unknown Team';
+            final dynamic maybeTeamName = (driver as dynamic).teamName;
+            teamName = (maybeTeamName is String && maybeTeamName.isNotEmpty)
+                ? maybeTeamName
+                : 'Unknown Team';
+          }
 
           final timePenSec = timePenaltySecondsByDriver[driverId] ?? 0;
           final adjustedTimeMs = baseTimeMs + timePenSec * 1000;
@@ -124,7 +136,8 @@ class _StandingsPageState extends State<StandingsPage> {
           eventEntries.add(
             _EventClassificationEntry(
               driverId: driverId,
-              driverName: driverName,
+              driverName: driver?.name ?? 'Unknown driver',
+              teamName: teamName,
               baseTimeMs: baseTimeMs,
               adjustedTimeMs: adjustedTimeMs,
             ),
@@ -135,7 +148,7 @@ class _StandingsPageState extends State<StandingsPage> {
           continue;
         }
 
-        // Sort event entries by adjusted time ascending
+        // Sort event entries by adjusted time ascending (best = first)
         eventEntries.sort(
           (a, b) => a.adjustedTimeMs.compareTo(b.adjustedTimeMs),
         );
@@ -147,29 +160,37 @@ class _StandingsPageState extends State<StandingsPage> {
           final basePoints = _pointsForFinish(eventPos);
 
           final standing = standingsMap.putIfAbsent(
-            entry.driverId,
-            () => _DriverStanding(
-              driverId: entry.driverId,
-              driverName: entry.driverName,
-            ),
+            entry.teamName,
+            () => _TeamStanding(teamName: entry.teamName),
           );
 
           standing.basePoints += basePoints;
+
+          // If this driver won the race, give the team a "win"
           if (eventPos == 1) {
             standing.wins += 1;
           }
         }
 
-        // Apply any points penalties for this event
+        // Apply any points penalties for this event at team level
         pointsPenaltyByDriver.forEach((driverId, penaltyPoints) {
-          final driverName = driverById[driverId]?.name ?? 'Unknown driver';
+          final driver = driverById[driverId];
+
+          final String teamName;
+          if (driver == null) {
+            teamName = 'Unknown Team';
+          } else {
+            final dynamic maybeTeamName = (driver as dynamic).teamName;
+            teamName = (maybeTeamName is String && maybeTeamName.isNotEmpty)
+                ? maybeTeamName
+                : 'Unknown Team';
+          }
+
           final standing = standingsMap.putIfAbsent(
-            driverId,
-            () => _DriverStanding(
-              driverId: driverId,
-              driverName: driverName,
-            ),
+            teamName,
+            () => _TeamStanding(teamName: teamName),
           );
+
           standing.penaltyPoints += penaltyPoints; // typically negative
         });
       }
@@ -181,10 +202,10 @@ class _StandingsPageState extends State<StandingsPage> {
         s.totalPoints = s.basePoints + s.penaltyPoints;
       }
 
-      // Sort drivers:
+      // Sort teams:
       // 1) Total points (desc)
       // 2) Wins (desc)
-      // 3) Driver name (asc)
+      // 3) Team name (asc)
       standingsList.sort((a, b) {
         if (b.totalPoints != a.totalPoints) {
           return b.totalPoints.compareTo(a.totalPoints);
@@ -192,7 +213,7 @@ class _StandingsPageState extends State<StandingsPage> {
         if (b.wins != a.wins) {
           return b.wins.compareTo(a.wins);
         }
-        return a.driverName.compareTo(b.driverName);
+        return a.teamName.compareTo(b.teamName);
       });
 
       setState(() {
@@ -201,7 +222,7 @@ class _StandingsPageState extends State<StandingsPage> {
       });
     } catch (e) {
       setState(() {
-        _error = 'Error loading standings: $e';
+        _error = 'Error loading team standings: $e';
         _isLoading = false;
       });
     }
@@ -238,28 +259,7 @@ class _StandingsPageState extends State<StandingsPage> {
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
-        title: Text('Standings – ${widget.division.name}'),
-        actions: [
-          IconButton(
-            tooltip: 'View team standings',
-            icon: const Icon(Icons.groups),
-            onPressed: () {
-              Navigator.of(context).push(
-                MaterialPageRoute(
-                  builder: (_) => TeamStandingsPage(
-                    league: widget.league,
-                    competition: widget.competition,
-                    division: widget.division,
-                    eventRepository: widget.eventRepository,
-                    driverRepository: widget.driverRepository,
-                    sessionResultRepository: widget.sessionResultRepository,
-                    penaltyRepository: widget.penaltyRepository,
-                  ),
-                ),
-              );
-            },
-          ),
-        ],
+        title: Text('Team standings – ${widget.division.name}'),
       ),
       body: _isLoading
           ? const Center(child: CircularProgressIndicator())
@@ -267,8 +267,7 @@ class _StandingsPageState extends State<StandingsPage> {
               ? Center(child: Text(_error!))
               : _standings.isEmpty
                   ? const Center(
-                      child:
-                          Text('No classified results yet for this division.'),
+                      child: Text('No classified results yet for this division.'),
                     )
                   : RefreshIndicator(
                       onRefresh: _loadStandings,
@@ -289,7 +288,7 @@ class _StandingsPageState extends State<StandingsPage> {
                             leading: CircleAvatar(
                               child: Text(position.toString()),
                             ),
-                            title: Text(standing.driverName),
+                            title: Text(standing.teamName),
                             subtitle: Text(subtitle),
                           );
                         },
@@ -299,33 +298,33 @@ class _StandingsPageState extends State<StandingsPage> {
   }
 }
 
-class _DriverStanding {
-  final String driverId;
-  final String driverName;
+class _TeamStanding {
+  final String teamName;
   int basePoints;
   int penaltyPoints;
   int totalPoints;
   int wins;
 
-  _DriverStanding({
-    required this.driverId,
-    required this.driverName,
+  _TeamStanding({
+    required this.teamName,
   })  : basePoints = 0,
         penaltyPoints = 0,
         totalPoints = 0,
         wins = 0;
 }
 
-/// Internal helper to represent classification for a single event.
+/// Internal helper to represent classification for a single event at driver level.
 class _EventClassificationEntry {
   final String driverId;
   final String driverName;
+  final String teamName;
   final int baseTimeMs;
   final int adjustedTimeMs;
 
   _EventClassificationEntry({
     required this.driverId,
     required this.driverName,
+    required this.teamName,
     required this.baseTimeMs,
     required this.adjustedTimeMs,
   });
