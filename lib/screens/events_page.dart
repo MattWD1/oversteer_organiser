@@ -1,3 +1,5 @@
+// lib/screens/events_page.dart
+
 import 'package:flutter/material.dart';
 
 import '../models/league.dart';
@@ -17,6 +19,7 @@ import '../repositories/penalty_repository.dart';
 import 'session_page.dart';
 import 'issue_log_page.dart';
 import 'penalties_page.dart';
+import 'driver_profile_page.dart';
 
 enum EventSortOption { name, date }
 
@@ -57,6 +60,20 @@ class _EventsPageState extends State<EventsPage> {
     super.initState();
     _futureEvents =
         widget.eventRepository.getEventsForDivision(widget.division.id);
+  }
+
+  // Safely extract team name from Driver without assuming a field exists
+  String _getTeamName(Driver driver) {
+    try {
+      final dynamic d = driver;
+      final value = d.teamName;
+      if (value is String && value.isNotEmpty) {
+        return value;
+      }
+    } catch (_) {
+      // ignore – driver just doesn't have a teamName field
+    }
+    return 'Unknown Team';
   }
 
   List<Event> _sortedEvents(List<Event> source) {
@@ -100,13 +117,6 @@ class _EventsPageState extends State<EventsPage> {
     }
   }
 
-  String _teamLabelForDriver(Driver? driver) {
-    if (driver == null) return 'Unknown Team';
-    final name = driver.teamName;
-    if (name == null || name.trim().isEmpty) return 'Unknown Team';
-    return name;
-  }
-
   Future<List<Driver>> _loadDivisionDrivers() async {
     final events =
         await widget.eventRepository.getEventsForDivision(widget.division.id);
@@ -131,7 +141,7 @@ class _EventsPageState extends State<EventsPage> {
     final Map<String, _TeamEntry> teams = {};
 
     for (final driver in drivers) {
-      final teamName = _teamLabelForDriver(driver);
+      final teamName = _getTeamName(driver);
       final entry =
           teams.putIfAbsent(teamName, () => _TeamEntry(teamName: teamName));
       entry.driverCount += 1;
@@ -194,7 +204,9 @@ class _EventsPageState extends State<EventsPage> {
         final driverId = result.driverId;
         final driver = driverById[driverId];
 
-        final teamName = _teamLabelForDriver(driver);
+        final teamName =
+            driver != null ? _getTeamName(driver) : 'Unknown Team';
+
         final timePenSec = timePenaltySecondsByDriver[driverId] ?? 0;
         final adjustedTimeMs = baseTimeMs + timePenSec * 1000;
 
@@ -254,7 +266,8 @@ class _EventsPageState extends State<EventsPage> {
         );
         dStanding.penaltyPoints += penaltyPoints;
 
-        final teamName = _teamLabelForDriver(driver);
+        final teamName =
+            driver != null ? _getTeamName(driver) : 'Unknown Team';
 
         final tStanding = teamStandings.putIfAbsent(
           teamName,
@@ -297,7 +310,7 @@ class _EventsPageState extends State<EventsPage> {
     return _DivisionRankingData(drivers: driverList, teams: teamList);
   }
 
-  // ---- Tab builders ----
+  // ---------- TABS ----------
 
   Widget _buildRaceTab() {
     return FutureBuilder<List<Event>>(
@@ -383,7 +396,8 @@ class _EventsPageState extends State<EventsPage> {
                                 builder: (_) => PenaltiesPage(
                                   event: event,
                                   driverRepository: widget.driverRepository,
-                                  penaltyRepository: widget.penaltyRepository,
+                                  penaltyRepository:
+                                      widget.penaltyRepository,
                                 ),
                               ),
                             );
@@ -391,7 +405,8 @@ class _EventsPageState extends State<EventsPage> {
                         ),
                         IconButton(
                           tooltip: 'View validation issues',
-                          icon: const Icon(Icons.warning_amber_outlined),
+                          icon:
+                              const Icon(Icons.warning_amber_outlined),
                           onPressed: () {
                             Navigator.of(context).push(
                               MaterialPageRoute(
@@ -417,7 +432,8 @@ class _EventsPageState extends State<EventsPage> {
                                 widget.sessionResultRepository,
                             validationIssueRepository:
                                 widget.validationIssueRepository,
-                            penaltyRepository: widget.penaltyRepository,
+                            penaltyRepository:
+                                widget.penaltyRepository,
                           ),
                         ),
                       );
@@ -495,12 +511,27 @@ class _EventsPageState extends State<EventsPage> {
           itemCount: drivers.length,
           itemBuilder: (context, index) {
             final driver = drivers[index];
-            final teamName = _teamLabelForDriver(driver);
+            final teamName = _getTeamName(driver);
 
             return ListTile(
               leading: const Icon(Icons.person),
               title: Text(driver.name),
               subtitle: Text('Team: $teamName'),
+              onTap: () {
+                // Open driver profile from Drivers tab
+                Navigator.of(context).push(
+                  MaterialPageRoute(
+                    builder: (_) => DriverProfilePage(
+                      driver: driver,
+                      division: widget.division,
+                      eventRepository: widget.eventRepository,
+                      sessionResultRepository:
+                          widget.sessionResultRepository,
+                      penaltyRepository: widget.penaltyRepository,
+                    ),
+                  ),
+                );
+              },
             );
           },
         );
@@ -561,6 +592,25 @@ class _EventsPageState extends State<EventsPage> {
                 ),
                 title: Text(standing.driverName),
                 subtitle: Text(subtitle),
+                onTap: () {
+                  // Open driver profile when tapping a driver in standings
+                  final driver = Driver(
+                    id: standing.driverId,
+                    name: standing.driverName,
+                  );
+                  Navigator.of(context).push(
+                    MaterialPageRoute(
+                      builder: (_) => DriverProfilePage(
+                        driver: driver,
+                        division: widget.division,
+                        eventRepository: widget.eventRepository,
+                        sessionResultRepository:
+                            widget.sessionResultRepository,
+                        penaltyRepository: widget.penaltyRepository,
+                      ),
+                    ),
+                  );
+                },
               );
             }),
             const Divider(height: 32),
@@ -657,7 +707,7 @@ class _EventsPageState extends State<EventsPage> {
   }
 }
 
-// ---- Helper classes ----
+// --------- helper classes ---------
 
 class _TeamEntry {
   final String teamName;

@@ -1,18 +1,28 @@
+// lib/repositories/competition_repository.dart
+
 import '../models/competition.dart';
 import '../models/division.dart';
 
 abstract class CompetitionRepository {
   Future<List<Competition>> getCompetitionsForLeague(String leagueId);
+
+  /// Active divisions for a given competition (non-archived only).
   Future<List<Division>> getDivisionsForCompetition(String competitionId);
 
-  /// Move a division into the archive for the given league.
-  Future<void> archiveDivision(String leagueId, String divisionId);
+  /// Active divisions for a whole league (non-archived only).
+  Future<List<Division>> getDivisionsForLeague(String leagueId);
 
-  /// All archived divisions for a league (across all its competitions/seasons).
+  /// Archived divisions for a whole league.
   Future<List<Division>> getArchivedDivisionsForLeague(String leagueId);
 
-  /// Find which competition (season) a division belongs to.
+  /// Look up the competition a division originally belongs to.
   Future<Competition?> getCompetitionForDivision(String divisionId);
+
+  /// Mark a division as archived.
+  Future<void> archiveDivision(String divisionId);
+
+  /// Bring a division back from archive.
+  Future<void> unarchiveDivision(String divisionId);
 }
 
 class InMemoryCompetitionRepository implements CompetitionRepository {
@@ -37,8 +47,8 @@ class InMemoryCompetitionRepository implements CompetitionRepository {
     Division(id: 'div3', competitionId: 'comp2', name: 'Single Tier'),
   ];
 
-  /// leagueId -> set of archived divisionIds
-  final Map<String, Set<String>> _archivedDivisionIdsByLeague = {};
+  /// IDs of divisions that have been archived.
+  final Set<String> _archivedDivisionIds = {};
 
   @override
   Future<List<Competition>> getCompetitionsForLeague(String leagueId) async {
@@ -50,54 +60,57 @@ class InMemoryCompetitionRepository implements CompetitionRepository {
   Future<List<Division>> getDivisionsForCompetition(
       String competitionId) async {
     await Future.delayed(const Duration(milliseconds: 200));
-
-    // Work out which league this competition belongs to so we can filter out
-    // any archived divisions for that league.
-    final competition = _competitions.firstWhere(
-      (c) => c.id == competitionId,
-      orElse: () => throw StateError(
-          'Unknown competitionId $competitionId in InMemoryCompetitionRepository'),
-    );
-    final archivedIds =
-        _archivedDivisionIdsByLeague[competition.leagueId] ?? <String>{};
-
     return _divisions
-        .where((d) =>
-            d.competitionId == competitionId && !archivedIds.contains(d.id))
+        .where(
+          (d) =>
+              d.competitionId == competitionId &&
+              !_archivedDivisionIds.contains(d.id),
+        )
         .toList();
   }
 
   @override
-  Future<void> archiveDivision(String leagueId, String divisionId) async {
-    await Future.delayed(const Duration(milliseconds: 100));
-    final archiveSet =
-        _archivedDivisionIdsByLeague.putIfAbsent(leagueId, () => <String>{});
-    archiveSet.add(divisionId);
+  Future<List<Division>> getDivisionsForLeague(String leagueId) async {
+    await Future.delayed(const Duration(milliseconds: 200));
+
+    final leagueCompetitionIds = _competitions
+        .where((c) => c.leagueId == leagueId)
+        .map((c) => c.id)
+        .toSet();
+
+    return _divisions
+        .where(
+          (d) =>
+              leagueCompetitionIds.contains(d.competitionId) &&
+              !_archivedDivisionIds.contains(d.id),
+        )
+        .toList();
   }
 
   @override
   Future<List<Division>> getArchivedDivisionsForLeague(
       String leagueId) async {
     await Future.delayed(const Duration(milliseconds: 200));
-    final archivedIds = _archivedDivisionIdsByLeague[leagueId] ?? <String>{};
-    if (archivedIds.isEmpty) return [];
 
-    final competitionIds = _competitions
+    final leagueCompetitionIds = _competitions
         .where((c) => c.leagueId == leagueId)
         .map((c) => c.id)
         .toSet();
 
     return _divisions
-        .where((d) =>
-            competitionIds.contains(d.competitionId) &&
-            archivedIds.contains(d.id))
+        .where(
+          (d) =>
+              leagueCompetitionIds.contains(d.competitionId) &&
+              _archivedDivisionIds.contains(d.id),
+        )
         .toList();
   }
 
   @override
   Future<Competition?> getCompetitionForDivision(String divisionId) async {
-    await Future.delayed(const Duration(milliseconds: 50));
+    await Future.delayed(const Duration(milliseconds: 100));
 
+    // Find the division manually so we can handle "not found" without null
     Division? division;
     for (final d in _divisions) {
       if (d.id == divisionId) {
@@ -107,11 +120,24 @@ class InMemoryCompetitionRepository implements CompetitionRepository {
     }
     if (division == null) return null;
 
+    // Now find the competition for that division
+    Competition? competition;
     for (final c in _competitions) {
       if (c.id == division.competitionId) {
-        return c;
+        competition = c;
+        break;
       }
     }
-    return null;
+    return competition;
+  }
+
+  @override
+  Future<void> archiveDivision(String divisionId) async {
+    _archivedDivisionIds.add(divisionId);
+  }
+
+  @override
+  Future<void> unarchiveDivision(String divisionId) async {
+    _archivedDivisionIds.remove(divisionId);
   }
 }

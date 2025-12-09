@@ -1,3 +1,5 @@
+// lib/screens/divisions_page.dart
+
 import 'package:flutter/material.dart';
 
 import '../models/league.dart';
@@ -16,12 +18,9 @@ import '../repositories/validation_issue_repository.dart';
 import '../repositories/penalty_repository.dart';
 
 import 'events_page.dart';
-import 'standings_page.dart';
-import 'archived_divisions_page.dart';
 
 class DivisionsPage extends StatefulWidget {
   final League league;
-  final Competition competition;
   final CompetitionRepository competitionRepository;
   final EventRepository eventRepository;
   final DriverRepository driverRepository;
@@ -32,7 +31,6 @@ class DivisionsPage extends StatefulWidget {
   const DivisionsPage({
     super.key,
     required this.league,
-    required this.competition,
     required this.competitionRepository,
     required this.eventRepository,
     required this.driverRepository,
@@ -48,56 +46,31 @@ class DivisionsPage extends StatefulWidget {
 class _DivisionsPageState extends State<DivisionsPage> {
   late Future<List<Division>> _futureDivisions;
 
-  // 0 = Divisions list, 1 = Overall Constructors Ranking
+  // 0 = Divisions list, 1 = Overall Constructors ranking
   int _currentTabIndex = 0;
+
+  // Simple in-memory archive: IDs of divisions that have been archived
+  final Set<String> _archivedDivisionIds = {};
+
+  // Dummy competition object – EventsPage still expects a Competition,
+  // but doesn’t actually use it for any logic.
+  late final Competition _dummyCompetition;
 
   @override
   void initState() {
     super.initState();
-    _futureDivisions = widget.competitionRepository
-        .getDivisionsForCompetition(widget.competition.id);
-  }
+    _futureDivisions =
+        widget.competitionRepository.getDivisionsForLeague(widget.league.id);
 
-  Future<void> _reloadDivisions() async {
-    setState(() {
-      _futureDivisions = widget.competitionRepository
-          .getDivisionsForCompetition(widget.competition.id);
-    });
-  }
-
-  Future<void> _archiveDivision(Division division) async {
-    final confirm = await showDialog<bool>(
-      context: context,
-      builder: (context) => AlertDialog(
-        title: const Text('Archive division'),
-        content: Text(
-          'Archive "${division.name}"?\n\n'
-          'It will be moved to the archive for this league and '
-          'removed from the active divisions list.',
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.of(context).pop(false),
-            child: const Text('Cancel'),
-          ),
-          TextButton(
-            onPressed: () => Navigator.of(context).pop(true),
-            child: const Text('Archive'),
-          ),
-        ],
-      ),
+    _dummyCompetition = Competition(
+      id: 'overall_${widget.league.id}',
+      leagueId: widget.league.id,
+      name: '${widget.league.name} – Season',
+      seasonName: null,
     );
-
-    if (confirm != true) return;
-
-    await widget.competitionRepository
-        .archiveDivision(widget.league.id, division.id);
-
-    if (!mounted) return;
-    await _reloadDivisions();
   }
 
-  // ---- Helpers for Overall Constructors Ranking ----
+  // ---------- Helpers for Constructors ranking ----------
 
   String _getTeamName(Driver driver) {
     try {
@@ -106,9 +79,7 @@ class _DivisionsPageState extends State<DivisionsPage> {
       if (value is String && value.isNotEmpty) {
         return value;
       }
-    } catch (_) {
-      // Driver has no teamName field.
-    }
+    } catch (_) {}
     return 'Unknown Team';
   }
 
@@ -139,160 +110,143 @@ class _DivisionsPageState extends State<DivisionsPage> {
     }
   }
 
-  /// Overall Constructors Championship for the whole league.
-  Future<List<_LeagueTeamStanding>> _computeLeagueConstructors() async {
-    try {
-      final competitions = await widget.competitionRepository
-          .getCompetitionsForLeague(widget.league.id);
+  Future<List<_TeamStanding>> _loadOverallConstructors() async {
+    final divisions =
+        await widget.competitionRepository.getDivisionsForLeague(widget.league.id);
 
-      if (competitions.isEmpty) {
-        return [];
-      }
+    if (divisions.isEmpty) {
+      return [];
+    }
 
-      final Map<String, _LeagueTeamStanding> standingsMap = {};
+    final Map<String, _TeamStanding> standingsMap = {};
 
-      for (final competition in competitions) {
-        final List<Division> divisions =
-            await widget.competitionRepository.getDivisionsForCompetition(
-          competition.id,
-        );
+    for (final division in divisions) {
+      final List<Event> events =
+          await widget.eventRepository.getEventsForDivision(division.id);
 
-        for (final division in divisions) {
-          final List<Event> events =
-              await widget.eventRepository.getEventsForDivision(division.id);
+      if (events.isEmpty) continue;
 
-          for (final event in events) {
-            final List<SessionResult> results =
-                widget.sessionResultRepository.getResultsForEvent(event.id);
+      for (final event in events) {
+        final List<SessionResult> results =
+            widget.sessionResultRepository.getResultsForEvent(event.id);
 
-            if (results.isEmpty) {
-              continue;
-            }
+        if (results.isEmpty) continue;
 
-            final List<Driver> eventDrivers =
-                await widget.driverRepository.getDriversForEvent(event.id);
+        final List<Driver> eventDrivers =
+            await widget.driverRepository.getDriversForEvent(event.id);
+        final Map<String, Driver> driverById = {
+          for (final d in eventDrivers) d.id: d,
+        };
 
-            final Map<String, Driver> driverById = {
-              for (final d in eventDrivers) d.id: d,
-            };
+        final List<Penalty> eventPenalties =
+            widget.penaltyRepository.getPenaltiesForEvent(event.id);
 
-            final List<Penalty> eventPenalties =
-                widget.penaltyRepository.getPenaltiesForEvent(event.id);
+        final Map<String, int> timePenaltySecondsByDriver = {};
+        final Map<String, int> pointsPenaltyByDriver = {};
 
-            final Map<String, int> timePenaltySecondsByDriver = {};
-            final Map<String, int> pointsPenaltyByDriver = {};
-
-            for (final p in eventPenalties) {
-              if (p.type == 'Time') {
-                timePenaltySecondsByDriver[p.driverId] =
-                    (timePenaltySecondsByDriver[p.driverId] ?? 0) + p.value;
-              } else if (p.type == 'Points') {
-                pointsPenaltyByDriver[p.driverId] =
-                    (pointsPenaltyByDriver[p.driverId] ?? 0) + p.value;
-              }
-            }
-
-            final List<_LeagueEventClassificationEntry> eventEntries = [];
-
-            for (final result in results) {
-              final baseTimeMs = result.raceTimeMillis;
-              if (baseTimeMs == null) {
-                continue;
-              }
-
-              final driverId = result.driverId;
-              final driver = driverById[driverId];
-
-              final teamName =
-                  driver != null ? _getTeamName(driver) : 'Unknown Team';
-
-              final timePenSec = timePenaltySecondsByDriver[driverId] ?? 0;
-              final adjustedTimeMs = baseTimeMs + timePenSec * 1000;
-
-              eventEntries.add(
-                _LeagueEventClassificationEntry(
-                  driverId: driverId,
-                  driverName: driver?.name ?? 'Unknown driver',
-                  teamName: teamName,
-                  baseTimeMs: baseTimeMs,
-                  adjustedTimeMs: adjustedTimeMs,
-                ),
-              );
-            }
-
-            if (eventEntries.isEmpty) {
-              continue;
-            }
-
-            eventEntries.sort(
-              (a, b) => a.adjustedTimeMs.compareTo(b.adjustedTimeMs),
-            );
-
-            for (var index = 0; index < eventEntries.length; index++) {
-              final entry = eventEntries[index];
-              final eventPos = index + 1;
-              final basePoints = _pointsForFinish(eventPos);
-
-              final standing = standingsMap.putIfAbsent(
-                entry.teamName,
-                () => _LeagueTeamStanding(teamName: entry.teamName),
-              );
-
-              standing.basePoints += basePoints;
-              if (eventPos == 1) {
-                standing.wins += 1;
-              }
-            }
-
-            pointsPenaltyByDriver.forEach((driverId, penaltyPoints) {
-              final driver = driverById[driverId];
-
-              final teamName =
-                  driver != null ? _getTeamName(driver) : 'Unknown Team';
-
-              final standing = standingsMap.putIfAbsent(
-                teamName,
-                () => _LeagueTeamStanding(teamName: teamName),
-              );
-
-              standing.penaltyPoints += penaltyPoints;
-            });
+        for (final p in eventPenalties) {
+          if (p.type == 'Time') {
+            timePenaltySecondsByDriver[p.driverId] =
+                (timePenaltySecondsByDriver[p.driverId] ?? 0) + p.value;
+          } else if (p.type == 'Points') {
+            pointsPenaltyByDriver[p.driverId] =
+                (pointsPenaltyByDriver[p.driverId] ?? 0) + p.value;
           }
         }
-      }
 
-      final standingsList = standingsMap.values.toList();
+        final List<_EventClassificationEntry> eventEntries = [];
 
-      for (final s in standingsList) {
-        s.totalPoints = s.basePoints + s.penaltyPoints;
-      }
+        for (final result in results) {
+          final baseTimeMs = result.raceTimeMillis;
+          if (baseTimeMs == null) continue;
 
-      standingsList.sort((a, b) {
-        if (b.totalPoints != a.totalPoints) {
-          return b.totalPoints.compareTo(a.totalPoints);
+          final driverId = result.driverId;
+          final driver = driverById[driverId];
+
+          final teamName =
+              driver != null ? _getTeamName(driver) : 'Unknown Team';
+
+          final timePenSec = timePenaltySecondsByDriver[driverId] ?? 0;
+          final adjustedTimeMs = baseTimeMs + timePenSec * 1000;
+
+          eventEntries.add(
+            _EventClassificationEntry(
+              driverId: driverId,
+              driverName: driver?.name ?? 'Unknown driver',
+              teamName: teamName,
+              baseTimeMs: baseTimeMs,
+              adjustedTimeMs: adjustedTimeMs,
+            ),
+          );
         }
-        if (b.wins != a.wins) {
-          return b.wins.compareTo(a.wins);
-        }
-        return a.teamName.compareTo(b.teamName);
-      });
 
-      return standingsList;
-    } catch (e) {
-      throw Exception('Error loading overall constructors: $e');
+        if (eventEntries.isEmpty) continue;
+
+        // Classify event by adjusted time
+        eventEntries.sort(
+          (a, b) => a.adjustedTimeMs.compareTo(b.adjustedTimeMs),
+        );
+
+        // Award base points per team (via each driver’s result)
+        for (var index = 0; index < eventEntries.length; index++) {
+          final entry = eventEntries[index];
+          final eventPos = index + 1;
+          final basePoints = _pointsForFinish(eventPos);
+
+          final standing = standingsMap.putIfAbsent(
+            entry.teamName,
+            () => _TeamStanding(teamName: entry.teamName),
+          );
+
+          standing.basePoints += basePoints;
+          if (eventPos == 1) {
+            standing.wins += 1;
+          }
+        }
+
+        // Apply points penalties to teams (mapped from driver → team)
+        pointsPenaltyByDriver.forEach((driverId, penaltyPoints) {
+          final driver = driverById[driverId];
+          final teamName =
+              driver != null ? _getTeamName(driver) : 'Unknown Team';
+
+          final standing = standingsMap.putIfAbsent(
+            teamName,
+            () => _TeamStanding(teamName: teamName),
+          );
+
+          standing.penaltyPoints += penaltyPoints;
+        });
+      }
     }
+
+    final standingsList = standingsMap.values.toList();
+
+    for (final s in standingsList) {
+      s.totalPoints = s.basePoints + s.penaltyPoints;
+    }
+
+    standingsList.sort((a, b) {
+      if (b.totalPoints != a.totalPoints) {
+        return b.totalPoints.compareTo(a.totalPoints);
+      }
+      if (b.wins != a.wins) {
+        return b.wins.compareTo(a.wins);
+      }
+      return a.teamName.compareTo(b.teamName);
+    });
+
+    return standingsList;
   }
 
-  // ---- UI builders ----
+  // ---------- Tabs ----------
 
   Widget _buildDivisionsTab() {
     return FutureBuilder<List<Division>>(
       future: _futureDivisions,
       builder: (context, snapshot) {
         if (snapshot.connectionState == ConnectionState.waiting) {
-          return const Center(
-            child: CircularProgressIndicator(),
-          );
+          return const Center(child: CircularProgressIndicator());
         }
 
         if (snapshot.hasError) {
@@ -301,53 +255,39 @@ class _DivisionsPageState extends State<DivisionsPage> {
           );
         }
 
-        final divisions = snapshot.data ?? [];
+        final allDivisions = snapshot.data ?? [];
 
-        if (divisions.isEmpty) {
+        if (allDivisions.isEmpty) {
           return const Center(
-            child: Text('No active divisions for this season.'),
+            child: Text('No divisions for this league.'),
+          );
+        }
+
+        final activeDivisions = allDivisions
+            .where((d) => !_archivedDivisionIds.contains(d.id))
+            .toList();
+
+        if (activeDivisions.isEmpty) {
+          return const Center(
+            child:
+                Text('No active divisions. Archived divisions are in the archive.'),
           );
         }
 
         return ListView.builder(
-          itemCount: divisions.length,
+          itemCount: activeDivisions.length,
           itemBuilder: (context, index) {
-            final division = divisions[index];
+            final division = activeDivisions[index];
 
             return ListTile(
               title: Text(division.name),
-              trailing: Row(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  IconButton(
-                    tooltip: 'View standings',
-                    icon: const Icon(Icons.emoji_events_outlined),
-                    onPressed: () {
-                      Navigator.of(context).push(
-                        MaterialPageRoute(
-                          builder: (_) => StandingsPage(
-                            league: widget.league,
-                            competition: widget.competition,
-                            division: division,
-                            eventRepository: widget.eventRepository,
-                            driverRepository: widget.driverRepository,
-                            sessionResultRepository:
-                                widget.sessionResultRepository,
-                            penaltyRepository: widget.penaltyRepository,
-                          ),
-                        ),
-                      );
-                    },
-                  ),
-                  const Icon(Icons.chevron_right),
-                ],
-              ),
+              trailing: const Icon(Icons.chevron_right),
               onTap: () {
                 Navigator.of(context).push(
                   MaterialPageRoute(
                     builder: (_) => EventsPage(
                       league: widget.league,
-                      competition: widget.competition,
+                      competition: _dummyCompetition,
                       division: division,
                       eventRepository: widget.eventRepository,
                       driverRepository: widget.driverRepository,
@@ -360,7 +300,40 @@ class _DivisionsPageState extends State<DivisionsPage> {
                   ),
                 );
               },
-              onLongPress: () => _archiveDivision(division),
+              onLongPress: () async {
+                final shouldArchive = await showDialog<bool>(
+                      context: context,
+                      builder: (context) => AlertDialog(
+                        title: const Text('Archive division'),
+                        content: Text(
+                          'Archive "${division.name}"? It will be removed from the active list but still visible in the archive.',
+                        ),
+                        actions: [
+                          TextButton(
+                            onPressed: () => Navigator.of(context).pop(false),
+                            child: const Text('Cancel'),
+                          ),
+                          TextButton(
+                            onPressed: () => Navigator.of(context).pop(true),
+                            child: const Text('Archive'),
+                          ),
+                        ],
+                      ),
+                    ) ??
+                    false;
+
+                if (shouldArchive) {
+                  setState(() {
+                    _archivedDivisionIds.add(division.id);
+                  });
+
+                  if (!mounted) return;
+                  // ignore: use_build_context_synchronously
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    SnackBar(content: Text('Archived ${division.name}.')),
+                  );
+                }
+              },
             );
           },
         );
@@ -369,18 +342,16 @@ class _DivisionsPageState extends State<DivisionsPage> {
   }
 
   Widget _buildRankingTab() {
-    return FutureBuilder<List<_LeagueTeamStanding>>(
-      future: _computeLeagueConstructors(),
+    return FutureBuilder<List<_TeamStanding>>(
+      future: _loadOverallConstructors(),
       builder: (context, snapshot) {
         if (snapshot.connectionState == ConnectionState.waiting) {
-          return const Center(
-            child: CircularProgressIndicator(),
-          );
+          return const Center(child: CircularProgressIndicator());
         }
 
         if (snapshot.hasError) {
           return Center(
-            child: Text('Error loading ranking: ${snapshot.error}'),
+            child: Text('Error loading rankings: ${snapshot.error}'),
           );
         }
 
@@ -418,8 +389,63 @@ class _DivisionsPageState extends State<DivisionsPage> {
     );
   }
 
+  Future<void> _showArchiveDialog() async {
+    final divisions =
+        await widget.competitionRepository.getDivisionsForLeague(widget.league.id);
+
+    final archivedDivisions = divisions
+        .where((d) => _archivedDivisionIds.contains(d.id))
+        .toList();
+
+    if (!mounted) return;
+
+    showDialog<void>(
+      context: context,
+      builder: (context) {
+        return AlertDialog(
+          title: const Text('Archived divisions'),
+          content: SizedBox(
+            width: double.maxFinite,
+            child: archivedDivisions.isEmpty
+                ? const Text('No archived divisions yet.')
+                : ListView.builder(
+                    shrinkWrap: true,
+                    itemCount: archivedDivisions.length,
+                    itemBuilder: (context, index) {
+                      final d = archivedDivisions[index];
+                      return ListTile(
+                        title: Text(d.name),
+                        onTap: () {
+                          Navigator.of(context).pop();
+                        },
+                      );
+                    },
+                  ),
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.of(context).pop(),
+              child: const Text('Close'),
+            ),
+          ],
+        );
+      },
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
+    Widget body;
+    switch (_currentTabIndex) {
+      case 0:
+        body = _buildDivisionsTab();
+        break;
+      case 1:
+      default:
+        body = _buildRankingTab();
+        break;
+    }
+
     return Scaffold(
       appBar: AppBar(
         title: Text('Divisions – ${widget.league.name}'),
@@ -427,27 +453,11 @@ class _DivisionsPageState extends State<DivisionsPage> {
           IconButton(
             tooltip: 'View archive',
             icon: const Icon(Icons.archive_outlined),
-            onPressed: () {
-              Navigator.of(context).push(
-                MaterialPageRoute(
-                  builder: (_) => ArchivedDivisionsPage(
-                    league: widget.league,
-                    competitionRepository: widget.competitionRepository,
-                    eventRepository: widget.eventRepository,
-                    driverRepository: widget.driverRepository,
-                    sessionResultRepository: widget.sessionResultRepository,
-                    validationIssueRepository:
-                        widget.validationIssueRepository,
-                    penaltyRepository: widget.penaltyRepository,
-                  ),
-                ),
-              );
-            },
+            onPressed: _showArchiveDialog,
           ),
         ],
       ),
-      body:
-          _currentTabIndex == 0 ? _buildDivisionsTab() : _buildRankingTab(),
+      body: body,
       bottomNavigationBar: BottomNavigationBar(
         selectedItemColor: Colors.amber,
         unselectedItemColor: Colors.grey,
@@ -459,7 +469,7 @@ class _DivisionsPageState extends State<DivisionsPage> {
         },
         items: const [
           BottomNavigationBarItem(
-            icon: Icon(Icons.view_list),
+            icon: Icon(Icons.flag),
             label: 'Divisions',
           ),
           BottomNavigationBarItem(
@@ -472,16 +482,16 @@ class _DivisionsPageState extends State<DivisionsPage> {
   }
 }
 
-// ---- Private models for league constructors ranking ----
+// ---------- helper classes for overall constructors ----------
 
-class _LeagueTeamStanding {
+class _TeamStanding {
   final String teamName;
   int basePoints;
   int penaltyPoints;
   int totalPoints;
   int wins;
 
-  _LeagueTeamStanding({
+  _TeamStanding({
     required this.teamName,
   })  : basePoints = 0,
         penaltyPoints = 0,
@@ -489,14 +499,14 @@ class _LeagueTeamStanding {
         wins = 0;
 }
 
-class _LeagueEventClassificationEntry {
+class _EventClassificationEntry {
   final String driverId;
   final String driverName;
   final String teamName;
   final int baseTimeMs;
   final int adjustedTimeMs;
 
-  _LeagueEventClassificationEntry({
+  _EventClassificationEntry({
     required this.driverId,
     required this.driverName,
     required this.teamName,

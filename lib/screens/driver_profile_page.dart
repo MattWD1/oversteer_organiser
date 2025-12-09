@@ -4,8 +4,10 @@ import 'package:flutter/material.dart';
 
 import '../models/driver.dart';
 import '../models/division.dart';
+// ignore: unused_import
 import '../models/event.dart';
 import '../models/session_result.dart';
+// ignore: unused_import
 import '../models/penalty.dart';
 
 import '../repositories/event_repository.dart';
@@ -33,12 +35,41 @@ class DriverProfilePage extends StatefulWidget {
 }
 
 class _DriverProfilePageState extends State<DriverProfilePage> {
-  late Future<_DriverStats> _futureStats;
+  late TextEditingController _nameController;
+  late TextEditingController _numberController;
+  late TextEditingController _nationalityController;
+
+  bool _isLoadingStats = true;
+  String? _statsError;
+
+  int _races = 0;
+  int _wins = 0;
+  int _podiums = 0;
+  int _fastestLaps = 0;
+  int _positionsGained = 0;
+  double _avgFinish = 0;
+  double _pointsPerRace = 0;
+  int _penaltyPoints = 0;
 
   @override
   void initState() {
     super.initState();
-    _futureStats = _loadStats();
+    _nameController = TextEditingController(text: widget.driver.name);
+    _numberController = TextEditingController(
+      text: widget.driver.number?.toString() ?? '',
+    );
+    _nationalityController = TextEditingController(
+      text: widget.driver.nationality ?? '',
+    );
+    _loadStats();
+  }
+
+  @override
+  void dispose() {
+    _nameController.dispose();
+    _numberController.dispose();
+    _nationalityController.dispose();
+    super.dispose();
   }
 
   int _pointsForFinish(int position) {
@@ -68,152 +99,387 @@ class _DriverProfilePageState extends State<DriverProfilePage> {
     }
   }
 
-  Future<_DriverStats> _loadStats() async {
-    final driver = widget.driver;
+  Future<void> _loadStats() async {
+    setState(() {
+      _isLoadingStats = true;
+      _statsError = null;
+    });
 
-    final List<Event> events =
-        await widget.eventRepository.getEventsForDivision(widget.division.id);
+    try {
+      final events = await widget.eventRepository
+          .getEventsForDivision(widget.division.id);
 
-    if (events.isEmpty) {
-      return const _DriverStats.empty();
-    }
+      int races = 0;
+      int wins = 0;
+      int podiums = 0;
+      int fastestLaps = 0;
+      int positionsGained = 0;
+      int totalFinish = 0;
+      int totalPoints = 0;
+      int penaltyPoints = 0;
 
-    int races = 0;
-    int basePoints = 0;
-    int penaltyPoints = 0;
-    int totalPoints = 0;
+      for (final event in events) {
+        final results =
+            widget.sessionResultRepository.getResultsForEvent(event.id);
 
-    int fastestLaps = 0;
-    int polePositions = 0;
-
-    int totalFinishPos = 0;
-    int finishCount = 0;
-
-    int totalGainedPositions = 0;
-
-    for (final event in events) {
-      final List<SessionResult> results =
-          widget.sessionResultRepository.getResultsForEvent(event.id);
-
-      final List<SessionResult> forDriver =
-          results.where((r) => r.driverId == driver.id).toList();
-
-      if (forDriver.isEmpty) {
-        continue;
-      }
-
-      // For now assume one result per driver per event.
-      final SessionResult result = forDriver.first;
-      races++;
-
-      // Fastest lap
-      if (result.hasFastestLap == true) {
-        fastestLaps++;
-      }
-
-      // Pole position (grid = 1)
-      if (result.gridPosition == 1) {
-        polePositions++;
-      }
-
-      // Finish stats
-      if (result.finishPosition != null) {
-        totalFinishPos += result.finishPosition!;
-        finishCount++;
-
-        final pts = _pointsForFinish(result.finishPosition!);
-        basePoints += pts;
-        totalPoints += pts;
-      }
-
-      // Gained positions (grid - finish; positive = net gain)
-      if (result.gridPosition != null && result.finishPosition != null) {
-        totalGainedPositions +=
-            (result.gridPosition! - result.finishPosition!);
-      }
-
-      // Points penalties for this event
-      final List<Penalty> eventPenalties =
-          widget.penaltyRepository.getPenaltiesForEvent(event.id);
-
-      for (final p in eventPenalties) {
-        if (p.driverId == driver.id && p.type == 'Points') {
-          penaltyPoints += p.value;
-          totalPoints += p.value;
-        }
-      }
-    }
-
-    final double avgFinish =
-        finishCount > 0 ? totalFinishPos / finishCount : 0.0;
-    final double pointsPerRace =
-        races > 0 ? totalPoints / races : 0.0;
-
-    return _DriverStats(
-      races: races,
-      basePoints: basePoints,
-      penaltyPoints: penaltyPoints,
-      totalPoints: totalPoints,
-      fastestLaps: fastestLaps,
-      polePositions: polePositions,
-      totalGainedPositions: totalGainedPositions,
-      averageFinishPosition: avgFinish,
-      pointsPerRace: pointsPerRace,
-    );
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    final driver = widget.driver;
-
-    return Scaffold(
-      appBar: AppBar(
-        title: Text(driver.name),
-      ),
-      body: FutureBuilder<_DriverStats>(
-        future: _futureStats,
-        builder: (context, snapshot) {
-          if (snapshot.connectionState == ConnectionState.waiting) {
-            return const Center(child: CircularProgressIndicator());
-          }
-
-          if (snapshot.hasError) {
-            return Center(
-              child: Text('Error loading stats: ${snapshot.error}'),
+        final result = results
+            .where((r) => r.driverId == widget.driver.id)
+            .cast<SessionResult?>()
+            .firstWhere(
+              (r) => r != null,
+              orElse: () => null,
             );
+
+        if (result == null) {
+          continue;
+        }
+
+        races++;
+
+        // Positions gained
+        if (result.gridPosition != null && result.finishPosition != null) {
+          positionsGained +=
+              (result.gridPosition! - result.finishPosition!);
+        }
+
+        // Finish stats
+        if (result.finishPosition != null) {
+          final finish = result.finishPosition!;
+          totalFinish += finish;
+          if (finish == 1) wins++;
+          if (finish <= 3) podiums++;
+        }
+
+        // Fastest lap flag
+        if (result.hasFastestLap == true) {
+          fastestLaps++;
+        }
+
+        // Base points
+        final basePoints =
+            _pointsForFinish(result.finishPosition ?? 0);
+        int eventPoints = basePoints;
+
+        // Penalty points from repository
+        final penalties =
+            widget.penaltyRepository.getPenaltiesForEvent(event.id);
+        for (final p in penalties) {
+          if (p.driverId == widget.driver.id && p.type == 'Points') {
+            eventPoints += p.value;
+            penaltyPoints += p.value;
           }
+        }
 
-          final stats = snapshot.data ?? const _DriverStats.empty();
+        totalPoints += eventPoints;
+      }
 
-          return SingleChildScrollView(
-            padding: const EdgeInsets.all(16),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                _buildHeaderCard(driver),
-                const SizedBox(height: 16),
-                _buildSeasonSummaryCard(stats),
-                const SizedBox(height: 16),
-                _buildPerformanceGrid(stats),
-              ],
-            ),
-          );
-        },
-      ),
+      setState(() {
+        _races = races;
+        _wins = wins;
+        _podiums = podiums;
+        _fastestLaps = fastestLaps;
+        _positionsGained = positionsGained;
+        _penaltyPoints = penaltyPoints;
+        _avgFinish =
+            races > 0 ? totalFinish / races : 0.0;
+        _pointsPerRace =
+            races > 0 ? totalPoints / races : 0.0;
+        _isLoadingStats = false;
+      });
+    } catch (e) {
+      setState(() {
+        _isLoadingStats = false;
+        _statsError = 'Error loading stats: $e';
+      });
+    }
+  }
+
+  // --- Nationality picker ---
+
+  static const List<String> _countries = [
+    '🇦🇫 Afghanistan',
+    '🇦🇱 Albania',
+    '🇩🇿 Algeria',
+    '🇦🇩 Andorra',
+    '🇦🇴 Angola',
+    '🇦🇬 Antigua and Barbuda',
+    '🇦🇷 Argentina',
+    '🇦🇲 Armenia',
+    '🇦🇺 Australia',
+    '🇦🇹 Austria',
+    '🇦🇿 Azerbaijan',
+    '🇧🇸 Bahamas',
+    '🇧🇭 Bahrain',
+    '🇧🇩 Bangladesh',
+    '🇧🇧 Barbados',
+    '🇧🇾 Belarus',
+    '🇧🇪 Belgium',
+    '🇧🇿 Belize',
+    '🇧🇯 Benin',
+    '🇧🇹 Bhutan',
+    '🇧🇴 Bolivia',
+    '🇧🇦 Bosnia and Herzegovina',
+    '🇧🇼 Botswana',
+    '🇧🇷 Brazil',
+    '🇧🇳 Brunei',
+    '🇧🇬 Bulgaria',
+    '🇧4 Burkina Faso',
+    '🇧🇮 Burundi',
+    '🇨🇻 Cabo Verde',
+    '🇰🇭 Cambodia',
+    '🇨🇲 Cameroon',
+    '🇨🇦 Canada',
+    '🇨🇫 Central African Republic',
+    '🇹🇩 Chad',
+    '🇨🇱 Chile',
+    '🇨🇳 China',
+    '🇨🇴 Colombia',
+    '🇰🇲 Comoros',
+    '🇨🇩 Congo (DRC)',
+    '🇨🇬 Congo (Republic)',
+    '🇨🇷 Costa Rica',
+    '🇨🇮 Côte d\'Ivoire',
+    '🇭🇷 Croatia',
+    '🇨🇺 Cuba',
+    '🇨🇾 Cyprus',
+    '🇨🇿 Czech Republic',
+    '🇩🇰 Denmark',
+    '🇩🇯 Djibouti',
+    '🇩🇲 Dominica',
+    '🇩🇴 Dominican Republic',
+    '🇹🇱 East Timor',
+    '🇪🇨 Ecuador',
+    '🇪🇬 Egypt',
+    '🇸🇻 El Salvador',
+    '🇬🇶 Equatorial Guinea',
+    '🇪🇷 Eritrea',
+    '🇪🇪 Estonia',
+    '🇸🇿 Eswatini',
+    '🇪🇹 Ethiopia',
+    '🇫🇯 Fiji',
+    '🇫🇮 Finland',
+    '🇫🇷 France',
+    '🇬🇦 Gabon',
+    '🇬🇲 Gambia',
+    '🇬🇪 Georgia',
+    '🇩🇪 Germany',
+    '🇬🇭 Ghana',
+    '🇬🇷 Greece',
+    '🇬🇩 Grenada',
+    '🇬🇹 Guatemala',
+    '🇬🇳 Guinea',
+    '🇬🇼 Guinea-Bissau',
+    '🇬🇾 Guyana',
+    '🇭🇹 Haiti',
+    '🇭🇳 Honduras',
+    '🇭🇺 Hungary',
+    '🇮🇸 Iceland',
+    '🇮🇳 India',
+    '🇮🇩 Indonesia',
+    '🇮🇷 Iran',
+    '🇮🇶 Iraq',
+    '🇮🇪 Ireland',
+    '🇮🇱 Israel',
+    '🇮🇹 Italy',
+    '🇯🇲 Jamaica',
+    '🇯🇵 Japan',
+    '🇯🇴 Jordan',
+    '🇰🇿 Kazakhstan',
+    '🇰🇪 Kenya',
+    '🇰🇮 Kiribati',
+    '🇰🇵 Korea (North)',
+    '🇰🇷 Korea (South)',
+    '🇽🇰 Kosovo',
+    '🇰🇼 Kuwait',
+    '🇰🇬 Kyrgyzstan',
+    '🇱🇦 Laos',
+    '🇱🇻 Latvia',
+    '🇱🇧 Lebanon',
+    '🇱🇸 Lesotho',
+    '🇱🇷 Liberia',
+    '🇱🇾 Libya',
+    '🇱🇮 Liechtenstein',
+    '🇱🇹 Lithuania',
+    '🇱🇺 Luxembourg',
+    '🇲🇬 Madagascar',
+    '🇲🇼 Malawi',
+    '🇲🇾 Malaysia',
+    '🇲🇻 Maldives',
+    '🇲🇱 Mali',
+    '🇲🇹 Malta',
+    '🇲🇭 Marshall Islands',
+    '🇲🇷 Mauritania',
+    '🇲🇺 Mauritius',
+    '🇲🇽 Mexico',
+    '🇫🇲 Micronesia',
+    '🇲🇩 Moldova',
+    '🇲🇨 Monaco',
+    '🇲🇳 Mongolia',
+    '🇲🇪 Montenegro',
+    '🇲🇦 Morocco',
+    '🇲🇿 Mozambique',
+    '🇲🇲 Myanmar',
+    '🇳🇦 Namibia',
+    '🇳🇷 Nauru',
+    '🇳🇵 Nepal',
+    '🇳🇱 Netherlands',
+    '🇳🇿 New Zealand',
+    '🇳🇮 Nicaragua',
+    '🇳🇪 Niger',
+    '🇳🇬 Nigeria',
+    '🇲🇰 North Macedonia',
+    '🇳🇴 Norway',
+    '🇴🇲 Oman',
+    '🇵🇰 Pakistan',
+    '🇵🇼 Palau',
+    '🇵🇸 Palestine',
+    '🇵🇦 Panama',
+    '🇵🇬 Papua New Guinea',
+    '🇵🇾 Paraguay',
+    '🇵🇪 Peru',
+    '🇵🇭 Philippines',
+    '🇵🇱 Poland',
+    '🇵🇹 Portugal',
+    '🇶🇦 Qatar',
+    '🇷🇴 Romania',
+    '🇷🇺 Russia',
+    '🇷🇼 Rwanda',
+    '🇰🇳 Saint Kitts and Nevis',
+    '🇱🇨 Saint Lucia',
+    '🇻🇨 Saint Vincent and the Grenadines',
+    '🇼🇸 Samoa',
+    '🇸🇲 San Marino',
+    '🇸🇹 Sao Tome and Principe',
+    '🇸🇦 Saudi Arabia',
+    '🇸🇳 Senegal',
+    '🇷🇸 Serbia',
+    '🇸🇨 Seychelles',
+    '🇸🇱 Sierra Leone',
+    '🇸🇬 Singapore',
+    '🇸🇰 Slovakia',
+    '🇸🇮 Slovenia',
+    '🇸🇧 Solomon Islands',
+    '🇸🇴 Somalia',
+    '🇿🇦 South Africa',
+    '🇸🇸 South Sudan',
+    '🇪🇸 Spain',
+    '🇱🇰 Sri Lanka',
+    '🇸🇩 Sudan',
+    '🇸🇷 Suriname',
+    '🇸🇪 Sweden',
+    '🇨🇭 Switzerland',
+    '🇸🇾 Syria',
+    '🇹🇼 Taiwan',
+    '🇹🇯 Tajikistan',
+    '🇹🇿 Tanzania',
+    '🇹🇭 Thailand',
+    '🇹🇬 Togo',
+    '🇹🇴 Tonga',
+    '🇹🇹 Trinidad and Tobago',
+    '🇹🇳 Tunisia',
+    '🇹🇷 Turkey',
+    '🇹🇲 Turkmenistan',
+    '🇹🇻 Tuvalu',
+    '🇺🇬 Uganda',
+    '🇺🇦 Ukraine',
+    '🇦🇪 United Arab Emirates',
+    '🇬🇧 United Kingdom',
+    '🇺🇸 United States',
+    '🇺🇾 Uruguay',
+    '🇺🇿 Uzbekistan',
+    '🇻🇺 Vanuatu',
+    '🇻🇦 Vatican City',
+    '🇻🇪 Venezuela',
+    '🇻🇳 Vietnam',
+    '🇾🇪 Yemen',
+    '🇿🇲 Zambia',
+    '🇿🇼 Zimbabwe',
+  ];
+
+  void _openNationalityPicker() {
+    showModalBottomSheet<void>(
+      context: context,
+      isScrollControlled: true,
+      builder: (context) {
+        String query = '';
+        List<String> filtered = List<String>.from(_countries);
+
+        return StatefulBuilder(
+          builder: (context, setSheetState) {
+            void applyFilter(String text) {
+              query = text.toLowerCase();
+              filtered = _countries
+                  .where(
+                    (c) => c.toLowerCase().contains(query),
+                  )
+                  .toList();
+              setSheetState(() {});
+            }
+
+            return Padding(
+              padding: EdgeInsets.only(
+                bottom: MediaQuery.of(context).viewInsets.bottom,
+                left: 16,
+                right: 16,
+                top: 16,
+              ),
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  const Text(
+                    'Select nationality',
+                    style: TextStyle(
+                      fontSize: 18,
+                      fontWeight: FontWeight.bold,
+                    ),
+                  ),
+                  const SizedBox(height: 12),
+                  TextField(
+                    decoration: const InputDecoration(
+                      labelText: 'Search',
+                      prefixIcon: Icon(Icons.search),
+                      border: OutlineInputBorder(),
+                    ),
+                    onChanged: applyFilter,
+                  ),
+                  const SizedBox(height: 12),
+                  SizedBox(
+                    height: 300,
+                    child: ListView.builder(
+                      itemCount: filtered.length,
+                      itemBuilder: (context, index) {
+                        final country = filtered[index];
+                        return ListTile(
+                          title: Text(country),
+                          onTap: () {
+                            setState(() {
+                              _nationalityController.text = country;
+                            });
+                            Navigator.of(context).pop();
+                          },
+                        );
+                      },
+                    ),
+                  ),
+                ],
+              ),
+            );
+          },
+        );
+      },
     );
   }
 
-  Widget _buildHeaderCard(Driver driver) {
-    final teamName =
-        (driver.teamName == null || driver.teamName!.trim().isEmpty)
-            ? 'Unknown Team'
-            : driver.teamName!;
-    final numberText =
-        driver.number != null ? '#${driver.number}' : 'No. N/A';
-    final nationalityText = driver.nationality ?? 'Nationality unknown';
+  Widget _buildProfileHeader() {
+    final name = _nameController.text.trim().isEmpty
+        ? widget.driver.name
+        : _nameController.text.trim();
+
+    final numberText = _numberController.text.trim();
+    final nationalityText = _nationalityController.text.trim();
 
     return Card(
-      elevation: 1,
+      margin: const EdgeInsets.only(bottom: 16),
       child: Padding(
         padding: const EdgeInsets.all(16),
         child: Row(
@@ -221,10 +487,11 @@ class _DriverProfilePageState extends State<DriverProfilePage> {
             CircleAvatar(
               radius: 28,
               child: Text(
-                driver.name.isNotEmpty
-                    ? driver.name[0].toUpperCase()
-                    : '?',
-                style: const TextStyle(fontSize: 24),
+                name.isNotEmpty ? name[0].toUpperCase() : '?',
+                style: const TextStyle(
+                  fontSize: 26,
+                  fontWeight: FontWeight.bold,
+                ),
               ),
             ),
             const SizedBox(width: 16),
@@ -233,25 +500,28 @@ class _DriverProfilePageState extends State<DriverProfilePage> {
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   Text(
-                    driver.name,
+                    name,
                     style: const TextStyle(
-                      fontSize: 18,
+                      fontSize: 20,
                       fontWeight: FontWeight.bold,
                     ),
                   ),
-                  const SizedBox(height: 4),
-                  Text(
-                    teamName,
-                    style: const TextStyle(fontSize: 14),
-                  ),
-                  const SizedBox(height: 4),
-                  Text(
-                    '$numberText • $nationalityText',
-                    style: const TextStyle(
-                      fontSize: 12,
-                      color: Colors.grey,
+                  if (numberText.isNotEmpty)
+                    Text(
+                      '#$numberText',
+                      style: const TextStyle(
+                        fontSize: 16,
+                        color: Colors.grey,
+                      ),
                     ),
-                  ),
+                  if (nationalityText.isNotEmpty)
+                    Text(
+                      nationalityText,
+                      style: const TextStyle(
+                        fontSize: 14,
+                        color: Colors.grey,
+                      ),
+                    ),
                 ],
               ),
             ),
@@ -261,48 +531,104 @@ class _DriverProfilePageState extends State<DriverProfilePage> {
     );
   }
 
-  Widget _buildSeasonSummaryCard(_DriverStats stats) {
+  Widget _buildEditableDetails() {
     return Card(
-      elevation: 1,
+      margin: const EdgeInsets.only(bottom: 16),
       child: Padding(
         padding: const EdgeInsets.all(16),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             const Text(
-              'Season Summary',
+              'Driver details',
               style: TextStyle(
                 fontSize: 16,
                 fontWeight: FontWeight.bold,
               ),
             ),
             const SizedBox(height: 12),
-            Row(
-              mainAxisAlignment: MainAxisAlignment.spaceBetween,
-              children: [
-                _smallStat('Races', stats.races.toString()),
-                _smallStat('Total Points', stats.totalPoints.toString()),
-                _smallStat('Base Points', stats.basePoints.toString()),
-              ],
+            TextField(
+              controller: _nameController,
+              decoration: const InputDecoration(
+                labelText: 'Name',
+                border: OutlineInputBorder(),
+              ),
+              onChanged: (_) => setState(() {}),
             ),
-            const SizedBox(height: 8),
-            Row(
-              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            const SizedBox(height: 12),
+            TextField(
+              controller: _numberController,
+              keyboardType: TextInputType.number,
+              decoration: const InputDecoration(
+                labelText: 'Driver number',
+                hintText: 'e.g. 44',
+                border: OutlineInputBorder(),
+              ),
+              onChanged: (_) => setState(() {}),
+            ),
+            const SizedBox(height: 12),
+            GestureDetector(
+              onTap: _openNationalityPicker,
+              child: AbsorbPointer(
+                child: TextField(
+                  controller: _nationalityController,
+                  decoration: const InputDecoration(
+                    labelText: 'Nationality',
+                    hintText: 'Tap to select',
+                    border: OutlineInputBorder(),
+                    suffixIcon: Icon(Icons.arrow_drop_down),
+                  ),
+                  onChanged: (_) => setState(() {}),
+                ),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildStatsCard() {
+    if (_isLoadingStats) {
+      return const Center(child: CircularProgressIndicator());
+    }
+    if (_statsError != null) {
+      return Center(child: Text(_statsError!));
+    }
+
+    return Card(
+      margin: const EdgeInsets.only(bottom: 16),
+      child: Padding(
+        padding: const EdgeInsets.all(16),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            const Text(
+              'Season stats (this division)',
+              style: TextStyle(
+                fontSize: 16,
+                fontWeight: FontWeight.bold,
+              ),
+            ),
+            const SizedBox(height: 12),
+            Wrap(
+              spacing: 24,
+              runSpacing: 12,
               children: [
-                _smallStat(
-                  'Penalty Points',
-                  stats.penaltyPoints.toString(),
+                _statTile('Races', _races.toString()),
+                _statTile('Wins', _wins.toString()),
+                _statTile('Podiums', _podiums.toString()),
+                _statTile('Fastest laps', _fastestLaps.toString()),
+                _statTile('Pos. gained', _positionsGained.toString()),
+                _statTile(
+                  'Avg. finish',
+                  _races > 0 ? _avgFinish.toStringAsFixed(2) : '-',
                 ),
-                _smallStat(
-                  'Pts / Race',
-                  stats.pointsPerRace.toStringAsFixed(2),
+                _statTile(
+                  'Pts / race',
+                  _races > 0 ? _pointsPerRace.toStringAsFixed(2) : '-',
                 ),
-                _smallStat(
-                  'Avg Finish',
-                  stats.races == 0
-                      ? 'N/A'
-                      : stats.averageFinishPosition.toStringAsFixed(2),
-                ),
+                _statTile('Penalty points', _penaltyPoints.toString()),
               ],
             ),
           ],
@@ -311,128 +637,48 @@ class _DriverProfilePageState extends State<DriverProfilePage> {
     );
   }
 
-  Widget _buildPerformanceGrid(_DriverStats stats) {
-    return Card(
-      elevation: 1,
-      child: Padding(
+  Widget _statTile(String label, String value) {
+    return SizedBox(
+      width: 120,
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(
+            value,
+            style: const TextStyle(
+              fontSize: 18,
+              fontWeight: FontWeight.bold,
+            ),
+          ),
+          const SizedBox(height: 4),
+          Text(
+            label,
+            style: const TextStyle(
+              fontSize: 12,
+              color: Colors.grey,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      appBar: AppBar(
+        title: Text('Driver – ${widget.driver.name}'),
+      ),
+      body: SingleChildScrollView(
         padding: const EdgeInsets.all(16),
         child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            const Text(
-              'Performance',
-              style: TextStyle(
-                fontSize: 16,
-                fontWeight: FontWeight.bold,
-              ),
-            ),
-            const SizedBox(height: 12),
-            GridView.count(
-              crossAxisCount: 2,
-              shrinkWrap: true,
-              physics: const NeverScrollableScrollPhysics(),
-              mainAxisSpacing: 12,
-              crossAxisSpacing: 12,
-              childAspectRatio: 3.0,
-              children: [
-                _bigStat('Fastest Laps', stats.fastestLaps.toString()),
-                _bigStat('Pole Positions', stats.polePositions.toString()),
-                _bigStat(
-                  'Net Gained Positions',
-                  stats.totalGainedPositions.toString(),
-                ),
-                _bigStat(
-                  'Races Classified',
-                  stats.races.toString(),
-                ),
-              ],
-            ),
+            _buildProfileHeader(),
+            _buildEditableDetails(),
+            _buildStatsCard(),
           ],
         ),
       ),
     );
   }
-
-  Widget _smallStat(String label, String value) {
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        Text(
-          label,
-          style: const TextStyle(
-            fontSize: 11,
-            color: Colors.grey,
-          ),
-        ),
-        const SizedBox(height: 2),
-        Text(
-          value,
-          style: const TextStyle(
-            fontSize: 14,
-            fontWeight: FontWeight.w600,
-          ),
-        ),
-      ],
-    );
-  }
-
-  Widget _bigStat(String label, String value) {
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        Text(
-          label,
-          style: const TextStyle(
-            fontSize: 12,
-            color: Colors.grey,
-          ),
-        ),
-        const SizedBox(height: 4),
-        Text(
-          value,
-          style: const TextStyle(
-            fontSize: 18,
-            fontWeight: FontWeight.bold,
-          ),
-        ),
-      ],
-    );
-  }
-}
-
-class _DriverStats {
-  final int races;
-  final int basePoints;
-  final int penaltyPoints;
-  final int totalPoints;
-
-  final int fastestLaps;
-  final int polePositions;
-  final int totalGainedPositions;
-
-  final double averageFinishPosition;
-  final double pointsPerRace;
-
-  const _DriverStats({
-    required this.races,
-    required this.basePoints,
-    required this.penaltyPoints,
-    required this.totalPoints,
-    required this.fastestLaps,
-    required this.polePositions,
-    required this.totalGainedPositions,
-    required this.averageFinishPosition,
-    required this.pointsPerRace,
-  });
-
-  const _DriverStats.empty()
-      : races = 0,
-        basePoints = 0,
-        penaltyPoints = 0,
-        totalPoints = 0,
-        fastestLaps = 0,
-        polePositions = 0,
-        totalGainedPositions = 0,
-        averageFinishPosition = 0.0,
-        pointsPerRace = 0.0;
 }

@@ -10,6 +10,8 @@ import '../repositories/validation_issue_repository.dart';
 import '../repositories/penalty_repository.dart';
 import 'divisions_page.dart';
 
+enum LeagueSortOption { name }
+
 class LeaguesPage extends StatefulWidget {
   final LeagueRepository repository;
   final CompetitionRepository competitionRepository;
@@ -36,11 +38,23 @@ class LeaguesPage extends StatefulWidget {
 
 class _LeaguesPageState extends State<LeaguesPage> {
   late Future<List<League>> _futureLeagues;
+  LeagueSortOption _sortOption = LeagueSortOption.name;
 
   @override
   void initState() {
     super.initState();
     _futureLeagues = widget.repository.getLeaguesForCurrentUser();
+  }
+
+  List<League> _sortedLeagues(List<League> source) {
+    final leagues = List<League>.from(source);
+
+    // For now we only sort by name – there is no date field on League.
+    leagues.sort(
+      (a, b) => a.name.toLowerCase().compareTo(b.name.toLowerCase()),
+    );
+
+    return leagues;
   }
 
   @override
@@ -64,75 +78,65 @@ class _LeaguesPageState extends State<LeaguesPage> {
             );
           }
 
-          final leagues = snapshot.data ?? [];
+          final originalLeagues = snapshot.data ?? [];
 
-          if (leagues.isEmpty) {
+          if (originalLeagues.isEmpty) {
             return const Center(
               child: Text('No leagues yet.'),
             );
           }
 
-          return ListView.builder(
-            itemCount: leagues.length,
-            itemBuilder: (context, index) {
-              final league = leagues[index];
+          final leagues = _sortedLeagues(originalLeagues);
 
-              return ListTile(
-                title: Text(league.name),
-                subtitle: Text('Organiser: ${league.organiserName}'),
-                trailing: const Icon(Icons.chevron_right),
-                onTap: () async {
-                  try {
-                    final competitions = await widget.competitionRepository
-                        .getCompetitionsForLeague(league.id);
+          return Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Padding(
+                padding:
+                    const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+                child: Row(
+                  children: const [
+                    Text(
+                      'Sort by: Name',
+                      style: TextStyle(fontWeight: FontWeight.w600),
+                    ),
+                  ],
+                ),
+              ),
+              const Divider(height: 1),
+              Expanded(
+                child: ListView.builder(
+                  itemCount: leagues.length,
+                  itemBuilder: (context, index) {
+                    final league = leagues[index];
 
-                    if (!mounted) return;
-
-                    if (competitions.isEmpty) {
-                      // ignore: use_build_context_synchronously
-                      ScaffoldMessenger.of(context).showSnackBar(
-                        const SnackBar(
-                          content: Text(
-                            'No seasons set up for this league yet.',
+                    return ListTile(
+                      title: Text(league.name),
+                      subtitle: Text('Organiser: ${league.organiserName}'),
+                      trailing: const Icon(Icons.chevron_right),
+                      onTap: () {
+                        Navigator.of(context).push(
+                          MaterialPageRoute(
+                            builder: (_) => DivisionsPage(
+                              league: league,
+                              competitionRepository:
+                                  widget.competitionRepository,
+                              eventRepository: widget.eventRepository,
+                              driverRepository: widget.driverRepository,
+                              sessionResultRepository:
+                                  widget.sessionResultRepository,
+                              validationIssueRepository:
+                                  widget.validationIssueRepository,
+                              penaltyRepository: widget.penaltyRepository,
+                            ),
                           ),
-                        ),
-                      );
-                      return;
-                    }
-
-                    final currentCompetition = competitions.first;
-
-                    // ignore: use_build_context_synchronously
-                    Navigator.of(context).push(
-                      MaterialPageRoute(
-                        builder: (_) => DivisionsPage(
-                          league: league,
-                          competition: currentCompetition,
-                          competitionRepository:
-                              widget.competitionRepository,
-                          eventRepository: widget.eventRepository,
-                          driverRepository: widget.driverRepository,
-                          sessionResultRepository:
-                              widget.sessionResultRepository,
-                          validationIssueRepository:
-                              widget.validationIssueRepository,
-                          penaltyRepository: widget.penaltyRepository,
-                        ),
-                      ),
+                        );
+                      },
                     );
-                  } catch (e) {
-                    if (!mounted) return;
-                    // ignore: use_build_context_synchronously
-                    ScaffoldMessenger.of(context).showSnackBar(
-                      SnackBar(
-                        content:
-                            Text('Error loading divisions for league: $e'),
-                      ),
-                    );
-                  }
-                },
-              );
-            },
+                  },
+                ),
+              ),
+            ],
           );
         },
       ),

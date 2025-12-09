@@ -1,61 +1,70 @@
-import 'dart:async';
+// lib/repositories/driver_repository.dart
 
 import '../models/driver.dart';
 
+/// Repository abstraction for loading drivers.
+///
+/// Later this will talk to your real database (per league / division / event),
+/// but for now it's an in-memory implementation so the rest of the app can be
+/// wired and tested.
 abstract class DriverRepository {
-  /// All drivers taking part in a given event.
+  /// Returns all drivers that took part in the given event.
+  ///
+  /// In the in-memory version this ignores [eventId] and just returns a demo
+  /// set, but the signature is ready for a real backend.
   Future<List<Driver>> getDriversForEvent(String eventId);
-
-  /// Look up a single driver by ID.
-  Future<Driver?> getDriverById(String driverId);
 }
 
 class InMemoryDriverRepository implements DriverRepository {
-  // Example drivers for testing. Adjust names/teams/numbers as you like.
-  final List<Driver> _drivers = const [
+  /// Demo data – shows that number, nationality and teamName are all working.
+  final List<Driver> _drivers = [
     Driver(
       id: 'drv1',
       name: 'Lewis Hamilton',
-      teamName: 'Mercedes',
       number: 44,
       nationality: 'British',
+      teamName: 'Mercedes',
     ),
     Driver(
       id: 'drv2',
       name: 'Max Verstappen',
-      teamName: 'Red Bull Racing',
       number: 1,
       nationality: 'Dutch',
+      teamName: 'Red Bull Racing',
     ),
     Driver(
       id: 'drv3',
       name: 'Charles Leclerc',
-      teamName: 'Scuderia Ferrari',
       number: 16,
       nationality: 'Monégasque',
+      teamName: 'Ferrari',
     ),
     Driver(
       id: 'drv4',
       name: 'Lando Norris',
-      teamName: 'McLaren',
       number: 4,
       nationality: 'British',
+      teamName: 'McLaren',
     ),
   ];
 
   @override
   Future<List<Driver>> getDriversForEvent(String eventId) async {
-    // In a real app, this would filter by eventId/division.
+    // In a real app, this will filter drivers by event / division / league.
     await Future.delayed(const Duration(milliseconds: 200));
-    return _drivers;
-  }
 
-  @override
-  Future<Driver?> getDriverById(String driverId) async {
-    await Future.delayed(const Duration(milliseconds: 50));
-    for (final d in _drivers) {
-      if (d.id == driverId) return d;
-    }
-    return null;
+    // Return copies so the caller can safely mutate name/number/nationality
+    // in memory (e.g. via DriverProfilePage) without affecting this list.
+    return _drivers
+        .map(
+          (d) => Driver(
+            id: d.id,
+            name: d.name,
+            number: d.number,
+            nationality: d.nationality,
+            teamName: d.teamName,
+          ),
+        )
+        .toList();
   }
 }
