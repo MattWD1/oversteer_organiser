@@ -1,21 +1,21 @@
 import 'package:flutter/material.dart';
 
 import '../models/league.dart';
-import '../models/competition.dart';
 import '../models/division.dart';
+import '../models/competition.dart';
+
 import '../repositories/competition_repository.dart';
 import '../repositories/event_repository.dart';
 import '../repositories/driver_repository.dart';
 import '../repositories/session_result_repository.dart';
 import '../repositories/validation_issue_repository.dart';
 import '../repositories/penalty_repository.dart';
+
 import 'events_page.dart';
 import 'standings_page.dart';
-import 'archived_divisions_page.dart';
 
-class DivisionsPage extends StatefulWidget {
+class ArchivedDivisionsPage extends StatefulWidget {
   final League league;
-  final Competition competition;
   final CompetitionRepository competitionRepository;
   final EventRepository eventRepository;
   final DriverRepository driverRepository;
@@ -23,10 +23,9 @@ class DivisionsPage extends StatefulWidget {
   final ValidationIssueRepository validationIssueRepository;
   final PenaltyRepository penaltyRepository;
 
-  const DivisionsPage({
+  const ArchivedDivisionsPage({
     super.key,
     required this.league,
-    required this.competition,
     required this.competitionRepository,
     required this.eventRepository,
     required this.driverRepository,
@@ -36,89 +35,32 @@ class DivisionsPage extends StatefulWidget {
   });
 
   @override
-  State<DivisionsPage> createState() => _DivisionsPageState();
+  State<ArchivedDivisionsPage> createState() => _ArchivedDivisionsPageState();
 }
 
-class _DivisionsPageState extends State<DivisionsPage> {
-  late Future<List<Division>> _futureDivisions;
+class _ArchivedDivisionsPageState extends State<ArchivedDivisionsPage> {
+  late Future<List<Division>> _futureArchivedDivisions;
 
   @override
   void initState() {
     super.initState();
-    _futureDivisions = widget.competitionRepository
-        .getDivisionsForCompetition(widget.competition.id);
+    _futureArchivedDivisions = widget.competitionRepository
+        .getArchivedDivisionsForLeague(widget.league.id);
   }
 
-  Future<void> _reloadDivisions() async {
-    setState(() {
-      _futureDivisions = widget.competitionRepository
-          .getDivisionsForCompetition(widget.competition.id);
-    });
-  }
-
-  Future<void> _archiveDivision(Division division) async {
-    final confirm = await showDialog<bool>(
-      context: context,
-      builder: (context) => AlertDialog(
-        title: const Text('Archive division'),
-        content: Text(
-          'Archive "${division.name}"?\n\n'
-          'It will be moved to the archive for this league and '
-          'removed from the active divisions list.',
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.of(context).pop(false),
-            child: const Text('Cancel'),
-          ),
-          TextButton(
-            onPressed: () => Navigator.of(context).pop(true),
-            child: const Text('Archive'),
-          ),
-        ],
-      ),
-    );
-
-    if (confirm != true) return;
-
-    await widget.competitionRepository
-        .archiveDivision(widget.league.id, division.id);
-
-    if (!mounted) return;
-    await _reloadDivisions();
+  Future<Competition?> _loadCompetitionFor(Division division) {
+    return widget.competitionRepository
+        .getCompetitionForDivision(division.id);
   }
 
   @override
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
-        title: Text('Divisions – ${widget.league.name}'),
-        actions: [
-          IconButton(
-            tooltip: 'View archive',
-            icon: const Icon(Icons.archive_outlined),
-            onPressed: () {
-              Navigator.of(context).push(
-                MaterialPageRoute(
-                  builder: (_) => ArchivedDivisionsPage(
-                    league: widget.league,
-                    competitionRepository: widget.competitionRepository,
-                    eventRepository: widget.eventRepository,
-                    driverRepository: widget.driverRepository,
-                    sessionResultRepository:
-                        widget.sessionResultRepository,
-                    validationIssueRepository:
-                        widget.validationIssueRepository,
-                    penaltyRepository: widget.penaltyRepository,
-                  ),
-                ),
-              );
-            },
-          ),
-        ],
+        title: Text('Archive – ${widget.league.name}'),
       ),
       body: FutureBuilder<List<Division>>(
-        future: _futureDivisions,
+        future: _futureArchivedDivisions,
         builder: (context, snapshot) {
           if (snapshot.connectionState == ConnectionState.waiting) {
             return const Center(
@@ -128,7 +70,8 @@ class _DivisionsPageState extends State<DivisionsPage> {
 
           if (snapshot.hasError) {
             return Center(
-              child: Text('Error loading divisions: ${snapshot.error}'),
+              child:
+                  Text('Error loading archived divisions: ${snapshot.error}'),
             );
           }
 
@@ -136,7 +79,7 @@ class _DivisionsPageState extends State<DivisionsPage> {
 
           if (divisions.isEmpty) {
             return const Center(
-              child: Text('No active divisions for this season.'),
+              child: Text('No archived divisions for this league yet.'),
             );
           }
 
@@ -153,18 +96,34 @@ class _DivisionsPageState extends State<DivisionsPage> {
                     IconButton(
                       tooltip: 'View standings',
                       icon: const Icon(Icons.emoji_events_outlined),
-                      onPressed: () {
+                      onPressed: () async {
+                        final competition =
+                            await _loadCompetitionFor(division);
+                        if (!mounted) return;
+                        if (competition == null) {
+                          // ignore: use_build_context_synchronously
+                          ScaffoldMessenger.of(context).showSnackBar(
+                            const SnackBar(
+                              content: Text(
+                                  'Could not find the season for this division.'),
+                            ),
+                          );
+                          return;
+                        }
+
+                        // ignore: use_build_context_synchronously
                         Navigator.of(context).push(
                           MaterialPageRoute(
                             builder: (_) => StandingsPage(
                               league: widget.league,
-                              competition: widget.competition,
+                              competition: competition,
                               division: division,
                               eventRepository: widget.eventRepository,
                               driverRepository: widget.driverRepository,
                               sessionResultRepository:
                                   widget.sessionResultRepository,
-                              penaltyRepository: widget.penaltyRepository,
+                              penaltyRepository:
+                                  widget.penaltyRepository,
                             ),
                           ),
                         );
@@ -173,12 +132,26 @@ class _DivisionsPageState extends State<DivisionsPage> {
                     const Icon(Icons.chevron_right),
                   ],
                 ),
-                onTap: () {
+                onTap: () async {
+                  final competition = await _loadCompetitionFor(division);
+                  if (!mounted) return;
+                  if (competition == null) {
+                    // ignore: use_build_context_synchronously
+                    ScaffoldMessenger.of(context).showSnackBar(
+                      const SnackBar(
+                        content: Text(
+                            'Could not find the season for this division.'),
+                      ),
+                    );
+                    return;
+                  }
+
+                  // ignore: use_build_context_synchronously
                   Navigator.of(context).push(
                     MaterialPageRoute(
                       builder: (_) => EventsPage(
                         league: widget.league,
-                        competition: widget.competition,
+                        competition: competition,
                         division: division,
                         eventRepository: widget.eventRepository,
                         driverRepository: widget.driverRepository,
@@ -191,7 +164,6 @@ class _DivisionsPageState extends State<DivisionsPage> {
                     ),
                   );
                 },
-                onLongPress: () => _archiveDivision(division),
               );
             },
           );
