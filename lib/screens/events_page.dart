@@ -3,10 +3,16 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
+import 'session_page.dart';
+import 'driver_profile_page.dart';
+
 import '../models/league.dart';
 import '../models/competition.dart';
 import '../models/division.dart';
 import '../models/event.dart';
+import '../models/driver.dart';
+import '../models/session_result.dart';
+import '../models/penalty.dart';
 
 import '../repositories/event_repository.dart';
 import '../repositories/driver_repository.dart';
@@ -377,6 +383,56 @@ class _PlannedEvent {
   });
 }
 
+// ---------- Standings helper models ----------
+
+class _DriverStanding {
+  final String driverId;
+  final String driverName;
+  int basePoints;
+  int penaltyPoints;
+  int totalPoints;
+  int wins;
+
+  _DriverStanding({
+    required this.driverId,
+    required this.driverName,
+  })  : basePoints = 0,
+        penaltyPoints = 0,
+        totalPoints = 0,
+        wins = 0;
+}
+
+class _TeamStanding {
+  final String teamName;
+  int basePoints;
+  int penaltyPoints;
+  int totalPoints;
+  int wins;
+
+  _TeamStanding({
+    required this.teamName,
+  })  : basePoints = 0,
+        penaltyPoints = 0,
+        totalPoints = 0,
+        wins = 0;
+}
+
+class _EventClassificationEntry {
+  final String driverId;
+  final String driverName;
+  final String teamName;
+  final int baseTimeMs;
+  final int adjustedTimeMs;
+
+  _EventClassificationEntry({
+    required this.driverId,
+    required this.driverName,
+    required this.teamName,
+    required this.baseTimeMs,
+    required this.adjustedTimeMs,
+  });
+}
+
 class EventsPage extends StatefulWidget {
   final League league;
   final Competition competition;
@@ -405,15 +461,29 @@ class EventsPage extends StatefulWidget {
 
 class _EventsPageState extends State<EventsPage> {
   late Future<List<Event>> _futureEvents;
-
-  // Local, UI-only planned events (including F1 tracks + custom)
   final List<_PlannedEvent> _localEvents = [];
+
+  // 0 = Race, 1 = Teams, 2 = Drivers, 3 = Rankings
+  int _currentEventsTabIndex = 0;
+
+  // 0 = Drivers' Championship, 1 = Constructors' Championship
+  int _rankingsTabIndex = 0;
+
+  // Rankings + division-wide data
+  bool _isRankingsLoading = false;
+  String? _rankingsError;
+  List<_DriverStanding> _driverStandings = [];
+  List<_TeamStanding> _teamStandings = [];
+  final Map<String, Driver> _driversById = {};
+  List<Driver> _divisionDrivers = [];
+  List<String> _divisionTeams = [];
 
   @override
   void initState() {
     super.initState();
     _futureEvents =
         widget.eventRepository.getEventsForDivision(widget.division.id);
+    _loadRankingsAndDivisionData();
   }
 
   Future<void> _refreshEvents() async {
@@ -437,18 +507,244 @@ class _EventsPageState extends State<EventsPage> {
   String _getEventFlag(Event event) {
     try {
       final dynamic e = event;
-
-      // Try common property names
-      final value = (e.flagEmoji ??
-              e.flag ??
-              e.trackFlag ??
-              e.countryFlag) as String?;
-
+      final value = (e.flagEmoji ?? e.flag ?? e.trackFlag ?? e.countryFlag)
+          as String?;
       if (value != null && value.isNotEmpty) {
         return value;
       }
     } catch (_) {}
     return '🏁';
+  }
+
+  // ---------- Rankings + division data loaders ----------
+
+  String _teamLabelForDriver(Driver? driver) {
+    if (driver == null) return 'Unknown Team';
+    final name = driver.teamName;
+    if (name == null || name.trim().isEmpty) return 'Unknown Team';
+    return name;
+  }
+
+  int _pointsForFinish(int position) {
+    switch (position) {
+      case 1:
+        return 25;
+      case 2:
+        return 18;
+      case 3:
+        return 15;
+      case 4:
+        return 12;
+      case 5:
+        return 10;
+      case 6:
+        return 8;
+      case 7:
+        return 6;
+      case 8:
+        return 4;
+      case 9:
+        return 2;
+      case 10:
+        return 1;
+      default:
+        return 0;
+    }
+  }
+
+  Future<void> _loadRankingsAndDivisionData() async {
+    setState(() {
+      _isRankingsLoading = true;
+      _rankingsError = null;
+      _driverStandings = [];
+      _teamStandings = [];
+      _divisionDrivers = [];
+      _divisionTeams = [];
+      _driversById.clear();
+    });
+
+    try {
+      final events =
+          await widget.eventRepository.getEventsForDivision(widget.division.id);
+
+      if (events.isEmpty) {
+        setState(() {
+          _isRankingsLoading = false;
+        });
+        return;
+      }
+
+      final Map<String, _DriverStanding> driverMap = {};
+      final Map<String, _TeamStanding> teamMap = {};
+      final Map<String, Driver> allDriversById = {};
+
+      for (final event in events) {
+        final List<SessionResult> results =
+            widget.sessionResultRepository.getResultsForEvent(event.id);
+        if (results.isEmpty) continue;
+
+        final List<Driver> eventDrivers =
+            await widget.driverRepository.getDriversForEvent(event.id);
+
+        final Map<String, Driver> driverById = {
+          for (final d in eventDrivers) d.id: d,
+        };
+
+        // track all drivers in this division
+        for (final d in eventDrivers) {
+          allDriversById[d.id] = d;
+        }
+
+        final List<Penalty> penalties =
+            widget.penaltyRepository.getPenaltiesForEvent(event.id);
+
+        final Map<String, int> timePenaltySecondsByDriver = {};
+        final Map<String, int> pointsPenaltyByDriver = {};
+
+        for (final p in penalties) {
+          if (p.type == 'Time') {
+            timePenaltySecondsByDriver[p.driverId] =
+                (timePenaltySecondsByDriver[p.driverId] ?? 0) + p.value;
+          } else if (p.type == 'Points') {
+            pointsPenaltyByDriver[p.driverId] =
+                (pointsPenaltyByDriver[p.driverId] ?? 0) + p.value;
+          }
+        }
+
+        final List<_EventClassificationEntry> eventEntries = [];
+
+        for (final result in results) {
+          final baseTimeMs = result.raceTimeMillis;
+          if (baseTimeMs == null) continue;
+
+          final driverId = result.driverId;
+          final driver = driverById[driverId];
+
+          final driverName = driver?.name ?? 'Unknown driver';
+          final teamName = _teamLabelForDriver(driver);
+          final timePenSec = timePenaltySecondsByDriver[driverId] ?? 0;
+          final adjustedTimeMs = baseTimeMs + timePenSec * 1000;
+
+          eventEntries.add(
+            _EventClassificationEntry(
+              driverId: driverId,
+              driverName: driverName,
+              teamName: teamName,
+              baseTimeMs: baseTimeMs,
+              adjustedTimeMs: adjustedTimeMs,
+            ),
+          );
+        }
+
+        if (eventEntries.isEmpty) continue;
+
+        eventEntries.sort(
+          (a, b) => a.adjustedTimeMs.compareTo(b.adjustedTimeMs),
+        );
+
+        // award points to drivers + teams
+        for (var index = 0; index < eventEntries.length; index++) {
+          final entry = eventEntries[index];
+          final eventPos = index + 1;
+          final basePoints = _pointsForFinish(eventPos);
+
+          final dStanding = driverMap.putIfAbsent(
+            entry.driverId,
+            () => _DriverStanding(
+              driverId: entry.driverId,
+              driverName: entry.driverName,
+            ),
+          );
+          dStanding.basePoints += basePoints;
+          if (eventPos == 1) dStanding.wins += 1;
+
+          final tStanding = teamMap.putIfAbsent(
+            entry.teamName,
+            () => _TeamStanding(teamName: entry.teamName),
+          );
+          tStanding.basePoints += basePoints;
+          if (eventPos == 1) tStanding.wins += 1;
+        }
+
+        // apply points penalties to both driver and team standings
+        pointsPenaltyByDriver.forEach((driverId, penaltyPoints) {
+          final driver = driverById[driverId];
+          final driverName = driver?.name ?? 'Unknown driver';
+          final teamName = _teamLabelForDriver(driver);
+
+          final dStanding = driverMap.putIfAbsent(
+            driverId,
+            () => _DriverStanding(
+              driverId: driverId,
+              driverName: driverName,
+            ),
+          );
+          dStanding.penaltyPoints += penaltyPoints;
+
+          final tStanding = teamMap.putIfAbsent(
+            teamName,
+            () => _TeamStanding(teamName: teamName),
+          );
+          tStanding.penaltyPoints += penaltyPoints;
+        });
+      }
+
+      final driverList = driverMap.values.toList();
+      for (final s in driverList) {
+        s.totalPoints = s.basePoints + s.penaltyPoints;
+      }
+      driverList.sort((a, b) {
+        if (b.totalPoints != a.totalPoints) {
+          return b.totalPoints.compareTo(a.totalPoints);
+        }
+        if (b.wins != a.wins) {
+          return b.wins.compareTo(a.wins);
+        }
+        return a.driverName.compareTo(b.driverName);
+      });
+
+      final teamList = teamMap.values.toList();
+      for (final s in teamList) {
+        s.totalPoints = s.basePoints + s.penaltyPoints;
+      }
+      teamList.sort((a, b) {
+        if (b.totalPoints != a.totalPoints) {
+          return b.totalPoints.compareTo(a.totalPoints);
+        }
+        if (b.wins != a.wins) {
+          return b.wins.compareTo(a.wins);
+        }
+        return a.teamName.compareTo(b.teamName);
+      });
+
+      // division-wide driver & team lists
+      final allDrivers = allDriversById.values.toList()
+        ..sort((a, b) => a.name.compareTo(b.name));
+      final Set<String> teamNames = {};
+      for (final d in allDrivers) {
+        final tName = d.teamName?.trim();
+        if (tName != null && tName.isNotEmpty) {
+          teamNames.add(tName);
+        }
+      }
+      final teamsList = teamNames.toList()..sort();
+
+      if (!mounted) return;
+      setState(() {
+        _driverStandings = driverList;
+        _teamStandings = teamList;
+        _divisionDrivers = allDrivers;
+        _divisionTeams = teamsList;
+        _driversById.addAll(allDriversById);
+        _isRankingsLoading = false;
+      });
+    } catch (e) {
+      if (!mounted) return;
+      setState(() {
+        _rankingsError = 'Error loading standings: $e';
+        _isRankingsLoading = false;
+      });
+    }
   }
 
   // ---------- Add event: F1 track picker + custom ----------
@@ -499,8 +795,9 @@ class _EventsPageState extends State<EventsPage> {
                       return ListTile(
                         leading: const Icon(Icons.edit),
                         title: const Text('Custom event…'),
-                        subtitle:
-                            const Text('Create your own name and select a flag'),
+                        subtitle: const Text(
+                          'Create your own name and select a flag',
+                        ),
                         onTap: () {
                           Navigator.of(context).pop();
                           _showCustomEventDialog();
@@ -520,11 +817,8 @@ class _EventsPageState extends State<EventsPage> {
   Future<void> _showCustomEventDialog() async {
     final nameController = TextEditingController();
 
-    // Sort flags alphabetically by country name
     final flagOptions = _baseFlagOptions.toList()
-      ..sort(
-        (a, b) => a.countryName.compareTo(b.countryName),
-      );
+      ..sort((a, b) => a.countryName.compareTo(b.countryName));
 
     _FlagOption selectedFlag = flagOptions.first;
 
@@ -551,7 +845,7 @@ class _EventsPageState extends State<EventsPage> {
                   ),
                   const SizedBox(height: 16),
                   DropdownButtonFormField<_FlagOption>(
-                    value: selectedFlag,
+                    initialValue: selectedFlag, // <- use initialValue
                     decoration: const InputDecoration(
                       labelText: 'Flag / Country',
                     ),
@@ -594,7 +888,9 @@ class _EventsPageState extends State<EventsPage> {
                       ScaffoldMessenger.of(context).showSnackBar(
                         const SnackBar(
                           content: Text('Event name cannot be empty.'),
-                        ),
+
+
+                      ),
                       );
                       return;
                     }
@@ -642,96 +938,386 @@ class _EventsPageState extends State<EventsPage> {
     );
   }
 
-  // ---------- UI ----------
+  // ---------- Tabs ----------
+
+  Widget _buildRaceTab() {
+    return FutureBuilder<List<Event>>(
+      future: _futureEvents,
+      builder: (context, snapshot) {
+        if (snapshot.connectionState == ConnectionState.waiting) {
+          return const Center(
+            child: CircularProgressIndicator(),
+          );
+        }
+
+        if (snapshot.hasError) {
+          return Center(
+            child: Text('Error loading events: ${snapshot.error}'),
+          );
+        }
+
+        final existingEvents = snapshot.data ?? [];
+        final totalCount = existingEvents.length + _localEvents.length;
+
+        if (totalCount == 0) {
+          return const Center(
+            child: Text('No events yet. Tap + to add one.'),
+          );
+        }
+
+        return RefreshIndicator(
+          onRefresh: () async {
+            await _refreshEvents();
+            await _loadRankingsAndDivisionData();
+          },
+          child: ListView.builder(
+            itemCount: totalCount,
+            itemBuilder: (context, index) {
+              if (index < existingEvents.length) {
+                final event = existingEvents[index];
+                final name = _getEventName(event);
+                final flag = _getEventFlag(event);
+
+                return ListTile(
+                  leading: Text(
+                    flag,
+                    style: const TextStyle(fontSize: 24),
+                  ),
+                  title: Text(name),
+                  trailing: const Icon(Icons.chevron_right),
+                  onTap: () {
+                    Navigator.of(context).push(
+                      MaterialPageRoute(
+                        builder: (_) => SessionPage(
+                          event: event,
+                          driverRepository: widget.driverRepository,
+                          sessionResultRepository:
+                              widget.sessionResultRepository,
+                          validationIssueRepository:
+                              widget.validationIssueRepository,
+                          penaltyRepository: widget.penaltyRepository,
+                        ),
+                      ),
+                    );
+                  },
+                );
+              } else {
+                final localIndex = index - existingEvents.length;
+                final event = _localEvents[localIndex];
+
+                return ListTile(
+                  leading: Text(
+                    event.flagEmoji,
+                    style: const TextStyle(fontSize: 24),
+                  ),
+                  title: Text(event.name),
+                  trailing: const Icon(Icons.chevron_right),
+                  onTap: () {
+                    ScaffoldMessenger.of(context).showSnackBar(
+                      const SnackBar(
+                        content: Text(
+                          'Custom/planned event – sessions coming soon.',
+                        ),
+                      ),
+                    );
+                  },
+                );
+              }
+            },
+          ),
+        );
+      },
+    );
+  }
+
+  Widget _buildTeamsTab() {
+    if (_isRankingsLoading && _divisionTeams.isEmpty) {
+      return const Center(child: CircularProgressIndicator());
+    }
+
+    if (_divisionTeams.isEmpty) {
+      return const Center(
+        child: Text(
+          'No teams found yet for this division.\n'
+          'Teams are derived from drivers entered into events.',
+          textAlign: TextAlign.center,
+        ),
+      );
+    }
+
+    return RefreshIndicator(
+      onRefresh: _loadRankingsAndDivisionData,
+      child: ListView.builder(
+        itemCount: _divisionTeams.length,
+        itemBuilder: (context, index) {
+          final name = _divisionTeams[index];
+          return ListTile(
+            leading: CircleAvatar(
+              child: Text(
+                name.isNotEmpty ? name[0].toUpperCase() : '?',
+              ),
+            ),
+            title: Text(name),
+            subtitle: const Text('Competing in this division'),
+          );
+        },
+      ),
+    );
+  }
+
+  Widget _buildDriversTab() {
+    if (_isRankingsLoading && _divisionDrivers.isEmpty) {
+      return const Center(child: CircularProgressIndicator());
+    }
+
+    if (_divisionDrivers.isEmpty) {
+      return const Center(
+        child: Text(
+          'No drivers found yet for this division.\n'
+          'Drivers are derived from session results.',
+          textAlign: TextAlign.center,
+        ),
+      );
+    }
+
+    return RefreshIndicator(
+      onRefresh: _loadRankingsAndDivisionData,
+      child: ListView.builder(
+        itemCount: _divisionDrivers.length,
+        itemBuilder: (context, index) {
+          final driver = _divisionDrivers[index];
+          final parts = <String>[];
+
+          if (driver.number != null) {
+            parts.add('#${driver.number}');
+          }
+          parts.add(driver.name);
+          if (driver.nationality != null && driver.nationality!.isNotEmpty) {
+            parts.add('(${driver.nationality})');
+          }
+
+          final subtitleParts = <String>[];
+          if (driver.teamName != null && driver.teamName!.isNotEmpty) {
+            subtitleParts.add(driver.teamName!);
+          }
+
+          return ListTile(
+            leading: CircleAvatar(
+              child: Text(
+                driver.name.isNotEmpty ? driver.name[0].toUpperCase() : '?',
+              ),
+            ),
+            title: Text(parts.join(' ')),
+            subtitle: subtitleParts.isEmpty
+                ? null
+                : Text(subtitleParts.join(' • ')),
+            onTap: () {
+              Navigator.of(context).push(
+                MaterialPageRoute(
+                  builder: (_) => DriverProfilePage(
+                    driver: driver,
+                    division: widget.division,
+                    eventRepository: widget.eventRepository,
+                    sessionResultRepository: widget.sessionResultRepository,
+                    penaltyRepository: widget.penaltyRepository,
+                  ),
+                ),
+              );
+            },
+          );
+        },
+      ),
+    );
+  }
+
+  Widget _buildRankingsTab() {
+    final showingDrivers = _rankingsTabIndex == 0;
+
+    Widget inner;
+    if (_isRankingsLoading) {
+      inner = const Center(child: CircularProgressIndicator());
+    } else if (_rankingsError != null) {
+      inner = Center(child: Text(_rankingsError!));
+    } else if ((showingDrivers && _driverStandings.isEmpty) ||
+        (!showingDrivers && _teamStandings.isEmpty)) {
+      inner = const Center(
+        child: Text('No classified results yet for this division.'),
+      );
+    } else if (showingDrivers) {
+      inner = RefreshIndicator(
+        onRefresh: _loadRankingsAndDivisionData,
+        child: ListView.builder(
+          itemCount: _driverStandings.length,
+          itemBuilder: (context, index) {
+            final standing = _driverStandings[index];
+            final position = index + 1;
+
+            final base = standing.basePoints;
+            final pen = standing.penaltyPoints;
+            final total = standing.totalPoints;
+
+            final subtitle =
+                'Points: $total (Base $base, Penalties $pen) • Wins: ${standing.wins}';
+
+            return ListTile(
+              leading: CircleAvatar(
+                child: Text(position.toString()),
+              ),
+              title: Text(standing.driverName),
+              subtitle: Text(subtitle),
+              onTap: () {
+                final driver = _driversById[standing.driverId];
+                if (driver == null) {
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    const SnackBar(
+                      content:
+                          Text('Driver profile not available for this entry.'),
+                    ),
+                  );
+                  return;
+                }
+
+                Navigator.of(context).push(
+                  MaterialPageRoute(
+                    builder: (_) => DriverProfilePage(
+                      driver: driver,
+                      division: widget.division,
+                      eventRepository: widget.eventRepository,
+                      sessionResultRepository:
+                          widget.sessionResultRepository,
+                      penaltyRepository: widget.penaltyRepository,
+                    ),
+                  ),
+                );
+              },
+            );
+          },
+        ),
+      );
+    } else {
+      inner = RefreshIndicator(
+        onRefresh: _loadRankingsAndDivisionData,
+        child: ListView.builder(
+          itemCount: _teamStandings.length,
+          itemBuilder: (context, index) {
+            final standing = _teamStandings[index];
+            final position = index + 1;
+
+            final base = standing.basePoints;
+            final pen = standing.penaltyPoints;
+            final total = standing.totalPoints;
+
+            final subtitle =
+                'Points: $total (Base $base, Penalties $pen) • Wins: ${standing.wins}';
+
+            return ListTile(
+              leading: CircleAvatar(
+                child: Text(position.toString()),
+              ),
+              title: Text(standing.teamName),
+              subtitle: Text(subtitle),
+            );
+          },
+        ),
+      );
+    }
+
+    return Column(
+      children: [
+        const SizedBox(height: 8),
+        Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 16),
+          child: ToggleButtons(
+            borderRadius: BorderRadius.circular(20),
+            isSelected: [
+              _rankingsTabIndex == 0,
+              _rankingsTabIndex == 1,
+            ],
+            onPressed: (index) {
+              setState(() {
+                _rankingsTabIndex = index;
+              });
+            },
+            children: const [
+              Padding(
+                padding: EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+                child: Text('Drivers'),
+              ),
+              Padding(
+                padding: EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+                child: Text('Constructors'),
+              ),
+            ],
+          ),
+        ),
+        const SizedBox(height: 8),
+        Expanded(child: inner),
+      ],
+    );
+  }
+
+  // ---------- Scaffold ----------
 
   @override
   Widget build(BuildContext context) {
+    Widget body;
+    switch (_currentEventsTabIndex) {
+      case 0:
+        body = _buildRaceTab();
+        break;
+      case 1:
+        body = _buildTeamsTab();
+        break;
+      case 2:
+        body = _buildDriversTab();
+        break;
+      case 3:
+      default:
+        body = _buildRankingsTab();
+        break;
+    }
+
     return Scaffold(
       appBar: AppBar(
         title: Text('Events – ${widget.division.name}'),
       ),
-      body: FutureBuilder<List<Event>>(
-        future: _futureEvents,
-        builder: (context, snapshot) {
-          if (snapshot.connectionState == ConnectionState.waiting) {
-            return const Center(
-              child: CircularProgressIndicator(),
-            );
-          }
-
-          if (snapshot.hasError) {
-            return Center(
-              child: Text('Error loading events: ${snapshot.error}'),
-            );
-          }
-
-          final existingEvents = snapshot.data ?? [];
-
-          final totalCount = existingEvents.length + _localEvents.length;
-
-          if (totalCount == 0) {
-            return const Center(
-              child: Text('No events yet. Tap + to add one.'),
-            );
-          }
-
-          return RefreshIndicator(
-            onRefresh: _refreshEvents,
-            child: ListView.builder(
-              itemCount: totalCount,
-              itemBuilder: (context, index) {
-                if (index < existingEvents.length) {
-                  final event = existingEvents[index];
-                  final name = _getEventName(event);
-                  final flag = _getEventFlag(event);
-
-                  return ListTile(
-                    leading: Text(
-                      flag,
-                      style: const TextStyle(fontSize: 24),
-                    ),
-                    title: Text(name),
-                    trailing: const Icon(Icons.chevron_right),
-                    onTap: () {
-                      ScaffoldMessenger.of(context).showSnackBar(
-                        const SnackBar(
-                          content:
-                              Text('Event details / sessions to be wired in.'),
-                        ),
-                      );
-                    },
-                  );
-                } else {
-                  final localIndex = index - existingEvents.length;
-                  final event = _localEvents[localIndex];
-
-                  return ListTile(
-                    leading: Text(
-                      event.flagEmoji,
-                      style: const TextStyle(fontSize: 24),
-                    ),
-                    title: Text(event.name),
-                    trailing: const Icon(Icons.chevron_right),
-                    onTap: () {
-                      ScaffoldMessenger.of(context).showSnackBar(
-                        const SnackBar(
-                          content:
-                              Text('Custom/planned event – sessions coming soon.'),
-                        ),
-                      );
-                    },
-                  );
-                }
-              },
-            ),
-          );
+      body: body,
+      bottomNavigationBar: BottomNavigationBar(
+        currentIndex: _currentEventsTabIndex,
+        selectedItemColor: Colors.amber,
+        unselectedItemColor: Colors.grey,
+        onTap: (index) {
+          setState(() {
+            _currentEventsTabIndex = index;
+          });
         },
+        items: [
+          const BottomNavigationBarItem(
+            icon: Icon(Icons.flag),
+            label: 'Race',
+          ),
+          const BottomNavigationBarItem(
+            icon: Icon(Icons.groups),
+            label: 'Teams',
+          ),
+          const BottomNavigationBarItem(
+            icon: Icon(Icons.person),
+            label: 'Drivers',
+          ),
+          const BottomNavigationBarItem(
+            icon: Icon(Icons.emoji_events_outlined),
+            label: 'Rankings',
+          ),
+        ],
       ),
-      floatingActionButton: FloatingActionButton(
-        onPressed: _showAddEventSheet,
-        tooltip: 'Add event',
-        child: const Icon(Icons.add),
-      ),
+      floatingActionButton: _currentEventsTabIndex == 0
+          ? FloatingActionButton(
+              onPressed: _showAddEventSheet,
+              tooltip: 'Add event',
+              child: const Icon(Icons.add),
+            )
+          : null,
     );
   }
 }
+
