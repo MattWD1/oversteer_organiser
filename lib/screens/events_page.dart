@@ -59,20 +59,6 @@ class _EventsPageState extends State<EventsPage> {
         widget.eventRepository.getEventsForDivision(widget.division.id);
   }
 
-  // Safely extract team name from Driver without assuming a field exists
-  String _getTeamName(Driver driver) {
-    try {
-      final dynamic d = driver;
-      final value = d.teamName;
-      if (value is String && value.isNotEmpty) {
-        return value;
-      }
-    } catch (_) {
-      // ignore – driver just doesn't have a teamName field
-    }
-    return 'Unknown Team';
-  }
-
   List<Event> _sortedEvents(List<Event> source) {
     final events = List<Event>.from(source);
 
@@ -114,6 +100,13 @@ class _EventsPageState extends State<EventsPage> {
     }
   }
 
+  String _teamLabelForDriver(Driver? driver) {
+    if (driver == null) return 'Unknown Team';
+    final name = driver.teamName;
+    if (name == null || name.trim().isEmpty) return 'Unknown Team';
+    return name;
+  }
+
   Future<List<Driver>> _loadDivisionDrivers() async {
     final events =
         await widget.eventRepository.getEventsForDivision(widget.division.id);
@@ -138,7 +131,7 @@ class _EventsPageState extends State<EventsPage> {
     final Map<String, _TeamEntry> teams = {};
 
     for (final driver in drivers) {
-      final teamName = _getTeamName(driver);
+      final teamName = _teamLabelForDriver(driver);
       final entry =
           teams.putIfAbsent(teamName, () => _TeamEntry(teamName: teamName));
       entry.driverCount += 1;
@@ -154,7 +147,7 @@ class _EventsPageState extends State<EventsPage> {
         await widget.eventRepository.getEventsForDivision(widget.division.id);
 
     if (events.isEmpty) {
-      return _DivisionRankingData(drivers: [], teams: []);
+      return const _DivisionRankingData(drivers: [], teams: []);
     }
 
     final Map<String, _DriverStanding> driverStandings = {};
@@ -201,9 +194,7 @@ class _EventsPageState extends State<EventsPage> {
         final driverId = result.driverId;
         final driver = driverById[driverId];
 
-        final teamName =
-            driver != null ? _getTeamName(driver) : 'Unknown Team';
-
+        final teamName = _teamLabelForDriver(driver);
         final timePenSec = timePenaltySecondsByDriver[driverId] ?? 0;
         final adjustedTimeMs = baseTimeMs + timePenSec * 1000;
 
@@ -263,8 +254,7 @@ class _EventsPageState extends State<EventsPage> {
         );
         dStanding.penaltyPoints += penaltyPoints;
 
-        final teamName =
-            driver != null ? _getTeamName(driver) : 'Unknown Team';
+        final teamName = _teamLabelForDriver(driver);
 
         final tStanding = teamStandings.putIfAbsent(
           teamName,
@@ -306,6 +296,8 @@ class _EventsPageState extends State<EventsPage> {
 
     return _DivisionRankingData(drivers: driverList, teams: teamList);
   }
+
+  // ---- Tab builders ----
 
   Widget _buildRaceTab() {
     return FutureBuilder<List<Event>>(
@@ -503,7 +495,7 @@ class _EventsPageState extends State<EventsPage> {
           itemCount: drivers.length,
           itemBuilder: (context, index) {
             final driver = drivers[index];
-            final teamName = _getTeamName(driver);
+            final teamName = _teamLabelForDriver(driver);
 
             return ListTile(
               leading: const Icon(Icons.person),
@@ -531,7 +523,7 @@ class _EventsPageState extends State<EventsPage> {
         }
 
         final data = snapshot.data ??
-            _DivisionRankingData(drivers: const [], teams: const []);
+            const _DivisionRankingData(drivers: [], teams: []);
 
         if (data.drivers.isEmpty && data.teams.isEmpty) {
           return const Center(
@@ -661,10 +653,11 @@ class _EventsPageState extends State<EventsPage> {
           ),
         ],
       ),
-
     );
   }
 }
+
+// ---- Helper classes ----
 
 class _TeamEntry {
   final String teamName;

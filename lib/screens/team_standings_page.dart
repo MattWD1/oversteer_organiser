@@ -48,15 +48,11 @@ class _TeamStandingsPageState extends State<TeamStandingsPage> {
     _loadStandings();
   }
 
-  String _getTeamName(Driver driver) {
-    try {
-      final dynamic d = driver;
-      final value = d.teamName;
-      if (value is String && value.isNotEmpty) {
-        return value;
-      }
-    } catch (_) {}
-    return 'Unknown Team';
+  String _teamLabelForDriver(Driver? driver) {
+    if (driver == null) return 'Unknown Team';
+    final name = driver.teamName;
+    if (name == null || name.trim().isEmpty) return 'Unknown Team';
+    return name;
   }
 
   Future<void> _loadStandings() async {
@@ -122,9 +118,7 @@ class _TeamStandingsPageState extends State<TeamStandingsPage> {
           final driverId = result.driverId;
           final driver = driverById[driverId];
 
-          final teamName =
-              driver != null ? _getTeamName(driver) : 'Unknown Team';
-
+          final teamName = _teamLabelForDriver(driver);
           final timePenSec = timePenaltySecondsByDriver[driverId] ?? 0;
           final adjustedTimeMs = baseTimeMs + timePenSec * 1000;
 
@@ -166,9 +160,7 @@ class _TeamStandingsPageState extends State<TeamStandingsPage> {
 
         pointsPenaltyByDriver.forEach((driverId, penaltyPoints) {
           final driver = driverById[driverId];
-
-          final teamName =
-              driver != null ? _getTeamName(driver) : 'Unknown Team';
+          final teamName = _teamLabelForDriver(driver);
 
           final standing = standingsMap.putIfAbsent(
             teamName,
@@ -247,7 +239,8 @@ class _TeamStandingsPageState extends State<TeamStandingsPage> {
               : _standings.isEmpty
                   ? const Center(
                       child: Text(
-                          'No classified results yet for this division.'),
+                        'No classified results yet for this division.',
+                      ),
                     )
                   : RefreshIndicator(
                       onRefresh: _loadStandings,
