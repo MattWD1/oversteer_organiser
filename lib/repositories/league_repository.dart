@@ -5,9 +5,20 @@ abstract class LeagueRepository {
 }
 
 class InMemoryLeagueRepository implements LeagueRepository {
-  final List<League> _leagues = const [
-    League(id: 'league1', name: 'F1 Sunday League', organiserName: 'Matt'),
-    League(id: 'league2', name: 'Midweek Sprint League', organiserName: 'Alex'),
+  // Simple in-memory data for now
+  final List<League> _leagues = [
+    League(
+      id: 'league1',
+      name: 'Fast Racing League',
+      organiserName: 'Matt',
+      createdAt: DateTime(2025, 1, 10),
+    ),
+    League(
+      id: 'league2',
+      name: 'Slow Racing League',
+      organiserName: 'Amanda',
+      createdAt: DateTime(2025, 2, 5),
+    ),
   ];
 
   @override

@@ -10,7 +10,11 @@ import '../repositories/validation_issue_repository.dart';
 import '../repositories/penalty_repository.dart';
 import 'divisions_page.dart';
 
-enum LeagueSortOption { name }
+enum LeagueSortOption {
+  nameAsc,
+  nameDesc,
+  dateCreatedNewest,
+}
 
 class LeaguesPage extends StatefulWidget {
   final LeagueRepository repository;
@@ -38,7 +42,7 @@ class LeaguesPage extends StatefulWidget {
 
 class _LeaguesPageState extends State<LeaguesPage> {
   late Future<List<League>> _futureLeagues;
-  LeagueSortOption _sortOption = LeagueSortOption.name;
+  LeagueSortOption _sortOption = LeagueSortOption.nameAsc;
 
   @override
   void initState() {
@@ -46,13 +50,31 @@ class _LeaguesPageState extends State<LeaguesPage> {
     _futureLeagues = widget.repository.getLeaguesForCurrentUser();
   }
 
+  String _sortLabel(LeagueSortOption option) {
+    switch (option) {
+      case LeagueSortOption.nameAsc:
+        return 'Name (A–Z)';
+      case LeagueSortOption.nameDesc:
+        return 'Name (Z–A)';
+      case LeagueSortOption.dateCreatedNewest:
+        return 'Date Created (Newest)';
+    }
+  }
+
   List<League> _sortedLeagues(List<League> source) {
     final leagues = List<League>.from(source);
 
-    // For now we only sort by name – there is no date field on League.
-    leagues.sort(
-      (a, b) => a.name.toLowerCase().compareTo(b.name.toLowerCase()),
-    );
+    leagues.sort((a, b) {
+      switch (_sortOption) {
+        case LeagueSortOption.nameAsc:
+          return a.name.toLowerCase().compareTo(b.name.toLowerCase());
+        case LeagueSortOption.nameDesc:
+          return b.name.toLowerCase().compareTo(a.name.toLowerCase());
+        case LeagueSortOption.dateCreatedNewest:
+          // Newest first = later createdAt comes first
+          return b.createdAt.compareTo(a.createdAt);
+      }
+    });
 
     return leagues;
   }
@@ -95,10 +117,45 @@ class _LeaguesPageState extends State<LeaguesPage> {
                 padding:
                     const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
                 child: Row(
-                  children: const [
-                    Text(
-                      'Sort by: Name',
+                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                  children: [
+                    const Text(
+                      'Sort by',
                       style: TextStyle(fontWeight: FontWeight.w600),
+                    ),
+                    PopupMenuButton<LeagueSortOption>(
+                      initialValue: _sortOption,
+                      onSelected: (value) {
+                        setState(() {
+                          _sortOption = value;
+                        });
+                      },
+                      itemBuilder: (context) => const [
+                        PopupMenuItem(
+                          value: LeagueSortOption.nameAsc,
+                          child: Text('Name (A–Z)'),
+                        ),
+                        PopupMenuItem(
+                          value: LeagueSortOption.nameDesc,
+                          child: Text('Name (Z–A)'),
+                        ),
+                        PopupMenuItem(
+                          value: LeagueSortOption.dateCreatedNewest,
+                          child: Text('Date Created (Newest)'),
+                        ),
+                      ],
+                      child: Row(
+                        children: [
+                          Text(
+                            _sortLabel(_sortOption),
+                            style: const TextStyle(
+                              fontWeight: FontWeight.w600,
+                            ),
+                          ),
+                          const SizedBox(width: 4),
+                          const Icon(Icons.arrow_drop_down),
+                        ],
+                      ),
                     ),
                   ],
                 ),
