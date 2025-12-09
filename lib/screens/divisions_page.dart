@@ -1,6 +1,7 @@
 // lib/screens/divisions_page.dart
 
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 
 import '../models/league.dart';
 import '../models/competition.dart';
@@ -51,6 +52,9 @@ class _DivisionsPageState extends State<DivisionsPage> {
 
   // Simple in-memory archive: IDs of divisions that have been archived
   final Set<String> _archivedDivisionIds = {};
+
+  // Local, in-memory divisions created while this page is open
+  final List<Division> _localDivisions = [];
 
   // Dummy competition object – EventsPage still expects a Competition,
   // but doesn’t actually use it for any logic.
@@ -239,6 +243,72 @@ class _DivisionsPageState extends State<DivisionsPage> {
     return standingsList;
   }
 
+  // ---------- Create Division ----------
+
+  Future<void> _showCreateDivisionDialog() async {
+    final controller = TextEditingController();
+
+    final name = await showDialog<String>(
+      context: context,
+      builder: (context) {
+        return AlertDialog(
+          title: const Text('Create Division'),
+          content: TextField(
+            controller: controller,
+            maxLength: 50,
+            inputFormatters: [
+              LengthLimitingTextInputFormatter(50),
+            ],
+            decoration: const InputDecoration(
+              labelText: 'Division name',
+              hintText: 'e.g. Tier 1, Sunday Elite',
+            ),
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.of(context).pop<String>(null),
+              child: const Text('Cancel'),
+            ),
+            ElevatedButton(
+              onPressed: () {
+                final text = controller.text.trim();
+                if (text.isEmpty) {
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    const SnackBar(
+                      content: Text('Division name cannot be empty.'),
+                    ),
+                  );
+                  return;
+                }
+                Navigator.of(context).pop<String>(text);
+              },
+              child: const Text('Create'),
+            ),
+          ],
+        );
+      },
+    );
+
+    if (name == null || name.isEmpty) return;
+
+    setState(() {
+      final newDivision = Division(
+      id: 'local_${DateTime.now().microsecondsSinceEpoch}',
+      competitionId: 'local_comp_${widget.league.id}', // or any placeholder
+      name: name,
+      // If your Division model has more required fields, add them here.
+    );
+
+
+      _localDivisions.add(newDivision);
+    });
+
+    if (!mounted) return;
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(content: Text('Division "$name" created.')),
+    );
+  }
+
   // ---------- Tabs ----------
 
   Widget _buildDivisionsTab() {
@@ -255,7 +325,13 @@ class _DivisionsPageState extends State<DivisionsPage> {
           );
         }
 
-        final allDivisions = snapshot.data ?? [];
+        final fetchedDivisions = snapshot.data ?? [];
+
+        // Combine divisions from repository with locally created ones
+        final allDivisions = <Division>[
+          ...fetchedDivisions,
+          ..._localDivisions,
+        ];
 
         if (allDivisions.isEmpty) {
           return const Center(
@@ -269,8 +345,9 @@ class _DivisionsPageState extends State<DivisionsPage> {
 
         if (activeDivisions.isEmpty) {
           return const Center(
-            child:
-                Text('No active divisions. Archived divisions are in the archive.'),
+            child: Text(
+              'No active divisions. Archived divisions are in the archive.',
+            ),
           );
         }
 
@@ -310,11 +387,13 @@ class _DivisionsPageState extends State<DivisionsPage> {
                         ),
                         actions: [
                           TextButton(
-                            onPressed: () => Navigator.of(context).pop(false),
+                            onPressed: () =>
+                                Navigator.of(context).pop(false),
                             child: const Text('Cancel'),
                           ),
                           TextButton(
-                            onPressed: () => Navigator.of(context).pop(true),
+                            onPressed: () =>
+                                Navigator.of(context).pop(true),
                             child: const Text('Archive'),
                           ),
                         ],
@@ -328,7 +407,6 @@ class _DivisionsPageState extends State<DivisionsPage> {
                   });
 
                   if (!mounted) return;
-                  // ignore: use_build_context_synchronously
                   ScaffoldMessenger.of(context).showSnackBar(
                     SnackBar(content: Text('Archived ${division.name}.')),
                   );
@@ -393,7 +471,12 @@ class _DivisionsPageState extends State<DivisionsPage> {
     final divisions =
         await widget.competitionRepository.getDivisionsForLeague(widget.league.id);
 
-    final archivedDivisions = divisions
+    final allDivisions = <Division>[
+      ...divisions,
+      ..._localDivisions,
+    ];
+
+    final archivedDivisions = allDivisions
         .where((d) => _archivedDivisionIds.contains(d.id))
         .toList();
 
@@ -478,6 +561,14 @@ class _DivisionsPageState extends State<DivisionsPage> {
           ),
         ],
       ),
+      // Only show + when on Divisions tab
+      floatingActionButton: _currentTabIndex == 0
+          ? FloatingActionButton(
+              onPressed: _showCreateDivisionDialog,
+              tooltip: 'Add division',
+              child: const Icon(Icons.add),
+            )
+          : null,
     );
   }
 }

@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 
 import '../models/league.dart';
 import '../repositories/league_repository.dart';
@@ -50,6 +51,12 @@ class _LeaguesPageState extends State<LeaguesPage> {
     _futureLeagues = widget.repository.getLeaguesForCurrentUser();
   }
 
+  Future<void> _refreshLeagues() async {
+    setState(() {
+      _futureLeagues = widget.repository.getLeaguesForCurrentUser();
+    });
+  }
+
   String _sortLabel(LeagueSortOption option) {
     switch (option) {
       case LeagueSortOption.nameAsc:
@@ -71,12 +78,174 @@ class _LeaguesPageState extends State<LeaguesPage> {
         case LeagueSortOption.nameDesc:
           return b.name.toLowerCase().compareTo(a.name.toLowerCase());
         case LeagueSortOption.dateCreatedNewest:
-          // Newest first = later createdAt comes first
+          // Newest first
           return b.createdAt.compareTo(a.createdAt);
       }
     });
 
     return leagues;
+  }
+
+  void _showAddLeagueOptions() {
+    showModalBottomSheet(
+      context: context,
+      builder: (context) {
+        return SafeArea(
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              ListTile(
+                leading: const Icon(Icons.add),
+                title: const Text('Create a league'),
+                onTap: () {
+                  Navigator.of(context).pop();
+                  _showCreateLeagueDialog();
+                },
+              ),
+              ListTile(
+                leading: const Icon(Icons.group_add),
+                title: const Text('Join an existing league'),
+                onTap: () {
+                  Navigator.of(context).pop();
+                  _showJoinLeagueDialog();
+                },
+              ),
+            ],
+          ),
+        );
+      },
+    );
+  }
+
+  Future<void> _showCreateLeagueDialog() async {
+    final controller = TextEditingController();
+
+    final name = await showDialog<String>(
+      context: context,
+      builder: (context) {
+        return AlertDialog(
+          title: const Text('Create League'),
+          content: TextField(
+            controller: controller,
+            maxLength: 50,
+            inputFormatters: [
+              LengthLimitingTextInputFormatter(50),
+            ],
+            decoration: const InputDecoration(
+              labelText: 'League name',
+              hintText: 'Enter a league name (max 50 characters)',
+            ),
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.of(context).pop<String>(null),
+              child: const Text('Cancel'),
+            ),
+            ElevatedButton(
+              onPressed: () {
+                final text = controller.text.trim();
+                if (text.isEmpty) {
+                  // basic inline validation
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    const SnackBar(
+                      content: Text('League name cannot be empty.'),
+                    ),
+                  );
+                  return;
+                }
+                Navigator.of(context).pop<String>(text);
+              },
+              child: const Text('Create'),
+            ),
+          ],
+        );
+      },
+    );
+
+    if (name == null || name.isEmpty) {
+      return;
+    }
+
+    final league = await widget.repository.createLeague(name);
+    if (!mounted) return;
+
+    await _refreshLeagues();
+
+    // ignore: use_build_context_synchronously
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text(
+          'League "${league.name}" created. Join code: ${league.joinCode}',
+        ),
+      ),
+    );
+  }
+
+  Future<void> _showJoinLeagueDialog() async {
+    final controller = TextEditingController();
+
+    final joinCode = await showDialog<String>(
+      context: context,
+      builder: (context) {
+        return AlertDialog(
+          title: const Text('Join League'),
+          content: TextField(
+            controller: controller,
+            decoration: const InputDecoration(
+              labelText: 'Join code',
+              hintText: 'Enter the league join code',
+            ),
+            textCapitalization: TextCapitalization.characters,
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.of(context).pop<String>(null),
+              child: const Text('Cancel'),
+            ),
+            ElevatedButton(
+              onPressed: () {
+                final text = controller.text.trim();
+                if (text.isEmpty) {
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    const SnackBar(
+                      content: Text('Join code cannot be empty.'),
+                    ),
+                  );
+                  return;
+                }
+                Navigator.of(context).pop<String>(text);
+              },
+              child: const Text('Join'),
+            ),
+          ],
+        );
+      },
+    );
+
+    if (joinCode == null || joinCode.isEmpty) {
+      return;
+    }
+
+    final league = await widget.repository.joinLeague(joinCode);
+    if (!mounted) return;
+
+    if (league == null) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('No league found for that join code.'),
+        ),
+      );
+      return;
+    }
+
+    await _refreshLeagues();
+
+    // ignore: use_build_context_synchronously
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text('Joined league "${league.name}".'),
+      ),
+    );
   }
 
   @override
@@ -104,7 +273,7 @@ class _LeaguesPageState extends State<LeaguesPage> {
 
           if (originalLeagues.isEmpty) {
             return const Center(
-              child: Text('No leagues yet.'),
+              child: Text('No leagues yet. Tap + to get started.'),
             );
           }
 
@@ -196,6 +365,11 @@ class _LeaguesPageState extends State<LeaguesPage> {
             ],
           );
         },
+      ),
+      floatingActionButton: FloatingActionButton(
+        onPressed: _showAddLeagueOptions,
+        tooltip: 'Add league',
+        child: const Icon(Icons.add),
       ),
     );
   }
