@@ -13,6 +13,7 @@ import '../models/penalty.dart';
 import '../repositories/event_repository.dart';
 import '../repositories/session_result_repository.dart';
 import '../repositories/penalty_repository.dart';
+import '../repositories/driver_repository.dart';
 
 class DriverProfilePage extends StatefulWidget {
   final Driver driver;
@@ -20,6 +21,7 @@ class DriverProfilePage extends StatefulWidget {
   final EventRepository eventRepository;
   final SessionResultRepository sessionResultRepository;
   final PenaltyRepository penaltyRepository;
+  final DriverRepository driverRepository;
 
   const DriverProfilePage({
     super.key,
@@ -28,6 +30,7 @@ class DriverProfilePage extends StatefulWidget {
     required this.eventRepository,
     required this.sessionResultRepository,
     required this.penaltyRepository,
+    required this.driverRepository,
   });
 
   @override
@@ -41,6 +44,7 @@ class _DriverProfilePageState extends State<DriverProfilePage> {
 
   bool _isLoadingStats = true;
   String? _statsError;
+  bool _isSaving = false;
 
   int _races = 0;
   int _wins = 0;
@@ -96,6 +100,65 @@ class _DriverProfilePageState extends State<DriverProfilePage> {
         return 1;
       default:
         return 0;
+    }
+  }
+
+  Future<void> _saveDriver() async {
+    setState(() {
+      _isSaving = true;
+    });
+
+    try {
+      // Parse the number from the text field
+      int? number;
+      final numberText = _numberController.text.trim();
+      if (numberText.isNotEmpty) {
+        number = int.tryParse(numberText);
+      }
+
+      // Create updated driver
+      final updatedDriver = Driver(
+        id: widget.driver.id,
+        name: _nameController.text.trim().isEmpty
+            ? widget.driver.name
+            : _nameController.text.trim(),
+        number: number,
+        nationality: _nationalityController.text.trim().isEmpty
+            ? null
+            : _nationalityController.text.trim(),
+        teamName: widget.driver.teamName,
+      );
+
+      // Save to repository
+      await widget.driverRepository.updateDriver(updatedDriver);
+
+      if (mounted) {
+        setState(() {
+          _isSaving = false;
+        });
+
+        // Show success message
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('Driver profile saved successfully'),
+            backgroundColor: Colors.green,
+          ),
+        );
+      }
+    } catch (e) {
+      if (mounted) {
+        setState(() {
+          _isSaving = false;
+        });
+
+        // Show error message
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Error saving driver: $e'),
+            backgroundColor: Colors.red,
+          ),
+        );
+      }
     }
   }
 
@@ -678,6 +741,20 @@ class _DriverProfilePageState extends State<DriverProfilePage> {
             _buildStatsCard(),
           ],
         ),
+      ),
+      floatingActionButton: FloatingActionButton.extended(
+        onPressed: _isSaving ? null : _saveDriver,
+        icon: _isSaving
+            ? const SizedBox(
+                width: 20,
+                height: 20,
+                child: CircularProgressIndicator(
+                  strokeWidth: 2,
+                  valueColor: AlwaysStoppedAnimation<Color>(Colors.white),
+                ),
+              )
+            : const Icon(Icons.save),
+        label: Text(_isSaving ? 'Saving...' : 'Save'),
       ),
     );
   }
