@@ -23,6 +23,9 @@ abstract class CompetitionRepository {
 
   /// Bring a division back from archive.
   Future<void> unarchiveDivision(String divisionId);
+
+  /// Permanently delete a division (both active and archived).
+  Future<void> deleteDivision(String divisionId);
 }
 
 class InMemoryCompetitionRepository implements CompetitionRepository {
@@ -41,10 +44,10 @@ class InMemoryCompetitionRepository implements CompetitionRepository {
     ),
   ];
 
-  final List<Division> _divisions = const [
-    Division(id: 'div1', competitionId: 'comp1', name: 'Tier 1'),
-    Division(id: 'div2', competitionId: 'comp1', name: 'Tier 2'),
-    Division(id: 'div3', competitionId: 'comp2', name: 'Single Tier'),
+  final List<Division> _divisions = [
+    const Division(id: 'div1', competitionId: 'comp1', name: 'Tier 1'),
+    const Division(id: 'div2', competitionId: 'comp1', name: 'Tier 2'),
+    const Division(id: 'div3', competitionId: 'comp2', name: 'Single Tier'),
   ];
 
   /// IDs of divisions that have been archived.
@@ -138,6 +141,13 @@ class InMemoryCompetitionRepository implements CompetitionRepository {
 
   @override
   Future<void> unarchiveDivision(String divisionId) async {
+    _archivedDivisionIds.remove(divisionId);
+  }
+
+  @override
+  Future<void> deleteDivision(String divisionId) async {
+    await Future.delayed(const Duration(milliseconds: 100));
+    _divisions.removeWhere((d) => d.id == divisionId);
     _archivedDivisionIds.remove(divisionId);
   }
 }

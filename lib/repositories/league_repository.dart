@@ -10,6 +10,9 @@ abstract class LeagueRepository {
 
   /// Join an existing league by join code. Returns null if not found.
   Future<League?> joinLeague(String joinCode);
+
+  /// Permanently delete a league.
+  Future<void> deleteLeague(String leagueId);
 }
 
 class InMemoryLeagueRepository implements LeagueRepository {
@@ -90,5 +93,12 @@ class InMemoryLeagueRepository implements LeagueRepository {
     }
 
     return found;
+  }
+
+  @override
+  Future<void> deleteLeague(String leagueId) async {
+    await Future.delayed(const Duration(milliseconds: 100));
+    _allLeagues.removeWhere((l) => l.id == leagueId);
+    _userLeagueIds.remove(leagueId);
   }
 }

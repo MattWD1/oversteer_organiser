@@ -357,29 +357,141 @@ class _DivisionsPageState extends State<DivisionsPage> {
           itemBuilder: (context, index) {
             final division = activeDivisions[index];
 
-            return ListTile(
-              title: Text(division.name),
-              trailing: const Icon(Icons.chevron_right),
-              onTap: () {
-                Navigator.of(context).push(
-                  MaterialPageRoute(
-                    builder: (_) => EventsPage(
-                      league: widget.league,
-                      competition: _dummyCompetition,
-                      division: division,
-                      competitionRepository: widget.competitionRepository,
-                      eventRepository: widget.eventRepository,
-                      driverRepository: widget.driverRepository,
-                      sessionResultRepository:
-                          widget.sessionResultRepository,
-                      validationIssueRepository:
-                          widget.validationIssueRepository,
-                      penaltyRepository: widget.penaltyRepository,
+            return Dismissible(
+              key: Key(division.id),
+              direction: DismissDirection.startToEnd,
+              confirmDismiss: (direction) async {
+                // Generate a random 6-digit code
+                final code = (100000 +
+                    (999999 - 100000) *
+                    (DateTime.now().millisecondsSinceEpoch % 1000) / 1000
+                ).toInt().toString();
+
+                final controller = TextEditingController();
+
+                final confirmed = await showDialog<bool>(
+                  context: context,
+                  builder: (context) => AlertDialog(
+                    title: const Text('Delete Division'),
+                    content: Column(
+                      mainAxisSize: MainAxisSize.min,
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          'You are about to permanently delete "${division.name}".\n\n'
+                          'This will delete all events and data associated with this division.\n\n'
+                          'To confirm, please enter this code:',
+                        ),
+                        const SizedBox(height: 16),
+                        Container(
+                          padding: const EdgeInsets.all(12),
+                          decoration: BoxDecoration(
+                            color: Colors.red.shade50,
+                            borderRadius: BorderRadius.circular(8),
+                            border: Border.all(color: Colors.red),
+                          ),
+                          child: Text(
+                            code,
+                            style: const TextStyle(
+                              fontSize: 24,
+                              fontWeight: FontWeight.bold,
+                              letterSpacing: 4,
+                            ),
+                          ),
+                        ),
+                        const SizedBox(height: 16),
+                        TextField(
+                          controller: controller,
+                          keyboardType: TextInputType.number,
+                          maxLength: 6,
+                          inputFormatters: [
+                            FilteringTextInputFormatter.digitsOnly,
+                            LengthLimitingTextInputFormatter(6),
+                          ],
+                          decoration: const InputDecoration(
+                            labelText: 'Enter code',
+                            border: OutlineInputBorder(),
+                          ),
+                        ),
+                      ],
                     ),
+                    actions: [
+                      TextButton(
+                        onPressed: () => Navigator.of(context).pop(false),
+                        child: const Text('Cancel'),
+                      ),
+                      ElevatedButton(
+                        onPressed: () {
+                          if (controller.text == code) {
+                            Navigator.of(context).pop(true);
+                          } else {
+                            ScaffoldMessenger.of(context).showSnackBar(
+                              const SnackBar(
+                                content: Text('Incorrect code. Please try again.'),
+                                backgroundColor: Colors.red,
+                              ),
+                            );
+                          }
+                        },
+                        style: ElevatedButton.styleFrom(
+                          backgroundColor: Colors.red,
+                          foregroundColor: Colors.white,
+                        ),
+                        child: const Text('Delete'),
+                      ),
+                    ],
+                  ),
+                );
+
+                return confirmed ?? false;
+              },
+              onDismissed: (direction) async {
+                await widget.competitionRepository.deleteDivision(division.id);
+                setState(() {
+                  _futureDivisions = widget.competitionRepository
+                      .getDivisionsForLeague(widget.league.id);
+                });
+                if (!mounted) return;
+                // ignore: use_build_context_synchronously
+                ScaffoldMessenger.of(context).showSnackBar(
+                  SnackBar(
+                    content: Text('"${division.name}" has been deleted'),
                   ),
                 );
               },
-              onLongPress: () async {
+              background: Container(
+                color: Colors.red,
+                alignment: Alignment.centerLeft,
+                padding: const EdgeInsets.only(left: 20),
+                child: const Icon(
+                  Icons.delete,
+                  color: Colors.white,
+                  size: 32,
+                ),
+              ),
+              child: ListTile(
+                title: Text(division.name),
+                trailing: const Icon(Icons.chevron_right),
+                onTap: () {
+                  Navigator.of(context).push(
+                    MaterialPageRoute(
+                      builder: (_) => EventsPage(
+                        league: widget.league,
+                        competition: _dummyCompetition,
+                        division: division,
+                        competitionRepository: widget.competitionRepository,
+                        eventRepository: widget.eventRepository,
+                        driverRepository: widget.driverRepository,
+                        sessionResultRepository:
+                            widget.sessionResultRepository,
+                        validationIssueRepository:
+                            widget.validationIssueRepository,
+                        penaltyRepository: widget.penaltyRepository,
+                      ),
+                    ),
+                  );
+                },
+                onLongPress: () async {
                 final shouldArchive = await showDialog<bool>(
                       context: context,
                       builder: (context) => AlertDialog(
@@ -415,6 +527,7 @@ class _DivisionsPageState extends State<DivisionsPage> {
                   );
                 }
               },
+              ),
             );
           },
         );

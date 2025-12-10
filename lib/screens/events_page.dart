@@ -374,17 +374,6 @@ const List<_FlagOption> _baseFlagOptions = [
   _FlagOption(countryName: 'Rest of World', flagEmoji: '🌐'),
 ];
 
-// Local UI-only event (for planning)
-class _PlannedEvent {
-  final String name;
-  final String flagEmoji;
-
-  _PlannedEvent({
-    required this.name,
-    required this.flagEmoji,
-  });
-}
-
 // ---------- Standings helper models ----------
 
 class _DriverStanding {
@@ -465,7 +454,6 @@ class EventsPage extends StatefulWidget {
 
 class _EventsPageState extends State<EventsPage> {
   late Future<List<Event>> _futureEvents;
-  final List<_PlannedEvent> _localEvents = [];
 
   // 0 = Race, 1 = Teams, 2 = Drivers, 3 = Rankings
   int _currentEventsTabIndex = 0;
@@ -826,7 +814,7 @@ class _EventsPageState extends State<EventsPage> {
 
     _FlagOption selectedFlag = flagOptions.first;
 
-    final result = await showDialog<_PlannedEvent>(
+    final result = await showDialog<Map<String, String>>(
       context: context,
       builder: (context) {
         return StatefulBuilder(
@@ -882,7 +870,7 @@ class _EventsPageState extends State<EventsPage> {
               actions: [
                 TextButton(
                   onPressed: () =>
-                      Navigator.of(context).pop<_PlannedEvent?>(null),
+                      Navigator.of(context).pop<Map<String, String>?>(null),
                   child: const Text('Cancel'),
                 ),
                 ElevatedButton(
@@ -898,11 +886,11 @@ class _EventsPageState extends State<EventsPage> {
                       );
                       return;
                     }
-                    Navigator.of(context).pop<_PlannedEvent>(
-                      _PlannedEvent(
-                        name: name,
-                        flagEmoji: selectedFlag.flagEmoji,
-                      ),
+                    Navigator.of(context).pop<Map<String, String>>(
+                      {
+                        'name': name,
+                        'flagEmoji': selectedFlag.flagEmoji,
+                      },
                     );
                   },
                   child: const Text('Add event'),
@@ -916,30 +904,48 @@ class _EventsPageState extends State<EventsPage> {
 
     if (result != null) {
       _addPlannedEvent(
-        name: result.name,
-        flagEmoji: result.flagEmoji,
+        name: result['name']!,
+        flagEmoji: result['flagEmoji']!,
       );
     }
   }
 
-  void _addPlannedEvent({
+  Future<void> _addPlannedEvent({
     required String name,
     required String flagEmoji,
-  }) {
-    setState(() {
-      _localEvents.add(
-        _PlannedEvent(
-          name: name,
-          flagEmoji: flagEmoji,
+  }) async {
+    try {
+      // Save the event to the repository
+      await widget.eventRepository.createEvent(
+        divisionId: widget.division.id,
+        name: name,
+        date: DateTime.now(),
+        flagEmoji: flagEmoji,
+      );
+
+      // Refresh the events list
+      setState(() {
+        _futureEvents =
+            widget.eventRepository.getEventsForDivision(widget.division.id);
+      });
+
+      if (!mounted) return;
+
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('Event "$name" added to this division.'),
         ),
       );
-    });
+    } catch (e) {
+      if (!mounted) return;
 
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(
-        content: Text('Event "$name" added to this division.'),
-      ),
-    );
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('Failed to add event: $e'),
+          backgroundColor: Colors.red,
+        ),
+      );
+    }
   }
 
   // ---------- Tabs ----------
@@ -960,10 +966,9 @@ class _EventsPageState extends State<EventsPage> {
           );
         }
 
-        final existingEvents = snapshot.data ?? [];
-        final totalCount = existingEvents.length + _localEvents.length;
+        final events = snapshot.data ?? [];
 
-        if (totalCount == 0) {
+        if (events.isEmpty) {
           return const Center(
             child: Text('No events yet. Tap + to add one.'),
           );
@@ -975,14 +980,66 @@ class _EventsPageState extends State<EventsPage> {
             await _loadRankingsAndDivisionData();
           },
           child: ListView.builder(
-            itemCount: totalCount,
+            itemCount: events.length,
             itemBuilder: (context, index) {
-              if (index < existingEvents.length) {
-                final event = existingEvents[index];
-                final name = _getEventName(event);
-                final flag = _getEventFlag(event);
+              final event = events[index];
+              final name = _getEventName(event);
+              final flag = _getEventFlag(event);
 
-                return ListTile(
+              return Dismissible(
+                key: Key(event.id),
+                direction: DismissDirection.startToEnd,
+                confirmDismiss: (direction) async {
+                  return await showDialog<bool>(
+                    context: context,
+                    builder: (context) => AlertDialog(
+                      title: const Text('Delete Event'),
+                      content: Text(
+                        'Are you sure you want to delete "$name"?\n\n'
+                        'This action cannot be undone.',
+                      ),
+                      actions: [
+                        TextButton(
+                          onPressed: () => Navigator.of(context).pop(false),
+                          child: const Text('Cancel'),
+                        ),
+                        ElevatedButton(
+                          onPressed: () => Navigator.of(context).pop(true),
+                          style: ElevatedButton.styleFrom(
+                            backgroundColor: Colors.red,
+                            foregroundColor: Colors.white,
+                          ),
+                          child: const Text('Delete'),
+                        ),
+                      ],
+                    ),
+                  );
+                },
+                onDismissed: (direction) async {
+                  await widget.eventRepository.deleteEvent(event.id);
+                  setState(() {
+                    _futureEvents = widget.eventRepository
+                        .getEventsForDivision(widget.division.id);
+                  });
+                  if (!mounted) return;
+                  // ignore: use_build_context_synchronously
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    SnackBar(
+                      content: Text('"$name" has been deleted'),
+                    ),
+                  );
+                },
+                background: Container(
+                  color: Colors.red,
+                  alignment: Alignment.centerLeft,
+                  padding: const EdgeInsets.only(left: 20),
+                  child: const Icon(
+                    Icons.delete,
+                    color: Colors.white,
+                    size: 32,
+                  ),
+                ),
+                child: ListTile(
                   leading: Text(
                     flag,
                     style: const TextStyle(fontSize: 24),
@@ -1004,29 +1061,8 @@ class _EventsPageState extends State<EventsPage> {
                       ),
                     );
                   },
-                );
-              } else {
-                final localIndex = index - existingEvents.length;
-                final event = _localEvents[localIndex];
-
-                return ListTile(
-                  leading: Text(
-                    event.flagEmoji,
-                    style: const TextStyle(fontSize: 24),
-                  ),
-                  title: Text(event.name),
-                  trailing: const Icon(Icons.chevron_right),
-                  onTap: () {
-                    ScaffoldMessenger.of(context).showSnackBar(
-                      const SnackBar(
-                        content: Text(
-                          'Custom/planned event – sessions coming soon.',
-                        ),
-                      ),
-                    );
-                  },
-                );
-              }
+                ),
+              );
             },
           ),
         );
