@@ -1120,6 +1120,7 @@ class _EventsPageState extends State<EventsPage> {
                     eventRepository: widget.eventRepository,
                     sessionResultRepository: widget.sessionResultRepository,
                     penaltyRepository: widget.penaltyRepository,
+                    driverRepository: widget.driverRepository,
                   ),
                 ),
               );
@@ -1186,6 +1187,7 @@ class _EventsPageState extends State<EventsPage> {
                       sessionResultRepository:
                           widget.sessionResultRepository,
                       penaltyRepository: widget.penaltyRepository,
+                      driverRepository: widget.driverRepository,
                     ),
                   ),
                 );

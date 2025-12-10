@@ -325,6 +325,7 @@ class _StandingsPageState extends State<StandingsPage> {
                                         widget.sessionResultRepository,
                                     penaltyRepository:
                                         widget.penaltyRepository,
+                                    driverRepository: widget.driverRepository,
                                   ),
                                 ),
                               );

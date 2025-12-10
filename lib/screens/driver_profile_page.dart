@@ -13,6 +13,7 @@ import '../models/penalty.dart';
 import '../repositories/event_repository.dart';
 import '../repositories/session_result_repository.dart';
 import '../repositories/penalty_repository.dart';
+import '../repositories/driver_repository.dart';
 
 class DriverProfilePage extends StatefulWidget {
   final Driver driver;
@@ -20,6 +21,7 @@ class DriverProfilePage extends StatefulWidget {
   final EventRepository eventRepository;
   final SessionResultRepository sessionResultRepository;
   final PenaltyRepository penaltyRepository;
+  final DriverRepository driverRepository;
 
   const DriverProfilePage({
     super.key,
@@ -28,6 +30,7 @@ class DriverProfilePage extends StatefulWidget {
     required this.eventRepository,
     required this.sessionResultRepository,
     required this.penaltyRepository,
+    required this.driverRepository,
   });
 
   @override
@@ -96,6 +99,61 @@ class _DriverProfilePageState extends State<DriverProfilePage> {
         return 1;
       default:
         return 0;
+    }
+  }
+
+  Future<void> _saveDriverDetails() async {
+    // Validate inputs
+    final name = _nameController.text.trim();
+    if (name.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Driver name cannot be empty')),
+      );
+      return;
+    }
+
+    // Parse driver number
+    int? number;
+    final numberText = _numberController.text.trim();
+    if (numberText.isNotEmpty) {
+      number = int.tryParse(numberText);
+      if (number == null) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Driver number must be a valid number')),
+        );
+        return;
+      }
+    }
+
+    // Create updated driver object
+    final updatedDriver = Driver(
+      id: widget.driver.id,
+      name: name,
+      number: number,
+      nationality: _nationalityController.text.trim().isEmpty
+          ? null
+          : _nationalityController.text.trim(),
+      teamName: widget.driver.teamName,
+    );
+
+    try {
+      // Save to repository
+      await widget.driverRepository.updateDriver(updatedDriver);
+
+      // Update the local driver object
+      widget.driver.name = updatedDriver.name;
+      widget.driver.number = updatedDriver.number;
+      widget.driver.nationality = updatedDriver.nationality;
+
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Driver details saved successfully')),
+      );
+    } catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Failed to save driver details: $e')),
+      );
     }
   }
 
@@ -678,6 +736,12 @@ class _DriverProfilePageState extends State<DriverProfilePage> {
             _buildStatsCard(),
           ],
         ),
+      ),
+      floatingActionButton: FloatingActionButton.extended(
+        onPressed: _saveDriverDetails,
+        icon: const Icon(Icons.save),
+        label: const Text('Save'),
+        tooltip: 'Save driver details',
       ),
     );
   }

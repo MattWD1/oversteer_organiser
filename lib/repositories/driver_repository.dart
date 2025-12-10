@@ -13,6 +13,12 @@ abstract class DriverRepository {
   /// In the in-memory version this ignores [eventId] and just returns a demo
   /// set, but the signature is ready for a real backend.
   Future<List<Driver>> getDriversForEvent(String eventId);
+
+  /// Updates an existing driver's details.
+  ///
+  /// In the in-memory version, this updates the driver in the local list.
+  /// In a real database implementation, this would persist the changes.
+  Future<void> updateDriver(Driver driver);
 }
 
 class InMemoryDriverRepository implements DriverRepository {
@@ -66,5 +72,20 @@ class InMemoryDriverRepository implements DriverRepository {
           ),
         )
         .toList();
+  }
+
+  @override
+  Future<void> updateDriver(Driver driver) async {
+    // Simulate a small delay as if writing to a database
+    await Future.delayed(const Duration(milliseconds: 100));
+
+    // Find the driver in the list by ID and update their details
+    final index = _drivers.indexWhere((d) => d.id == driver.id);
+    if (index != -1) {
+      _drivers[index].name = driver.name;
+      _drivers[index].number = driver.number;
+      _drivers[index].nationality = driver.nationality;
+      _drivers[index].teamName = driver.teamName;
+    }
   }
 }

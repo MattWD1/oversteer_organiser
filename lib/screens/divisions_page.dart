@@ -407,6 +407,7 @@ class _DivisionsPageState extends State<DivisionsPage> {
                   });
 
                   if (!mounted) return;
+                  // ignore: use_build_context_synchronously
                   ScaffoldMessenger.of(context).showSnackBar(
                     SnackBar(content: Text('Archived ${division.name}.')),
                   );
