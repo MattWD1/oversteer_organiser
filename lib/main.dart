@@ -1,6 +1,6 @@
 import 'package:flutter/material.dart';
 
-import 'screens/leagues_page.dart';
+import 'screens/login_screen.dart';
 import 'repositories/league_repository.dart';
 import 'repositories/competition_repository.dart';
 import 'repositories/event_repository.dart';
@@ -38,8 +38,8 @@ class OversteerApp extends StatelessWidget {
         colorScheme: ColorScheme.fromSeed(seedColor: Colors.red),
         useMaterial3: true,
       ),
-      home: LeaguesPage(
-        repository: leagueRepository,
+      home: LoginScreen(
+        leagueRepository: leagueRepository,
         competitionRepository: competitionRepository,
         eventRepository: eventRepository,
         driverRepository: driverRepository,
