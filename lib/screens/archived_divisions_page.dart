@@ -153,6 +153,7 @@ class _ArchivedDivisionsPageState extends State<ArchivedDivisionsPage> {
                         league: widget.league,
                         competition: competition,
                         division: division,
+                        competitionRepository: widget.competitionRepository,
                         eventRepository: widget.eventRepository,
                         driverRepository: widget.driverRepository,
                         sessionResultRepository:

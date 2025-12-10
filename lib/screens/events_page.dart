@@ -5,6 +5,7 @@ import 'package:flutter/services.dart';
 
 import 'session_page.dart';
 import 'driver_profile_page.dart';
+import 'team_profile_page.dart';
 
 import '../models/league.dart';
 import '../models/competition.dart';
@@ -14,6 +15,7 @@ import '../models/driver.dart';
 import '../models/session_result.dart';
 import '../models/penalty.dart';
 
+import '../repositories/competition_repository.dart';
 import '../repositories/event_repository.dart';
 import '../repositories/driver_repository.dart';
 import '../repositories/session_result_repository.dart';
@@ -437,6 +439,7 @@ class EventsPage extends StatefulWidget {
   final League league;
   final Competition competition;
   final Division division;
+  final CompetitionRepository competitionRepository;
   final EventRepository eventRepository;
   final DriverRepository driverRepository;
   final SessionResultRepository sessionResultRepository;
@@ -448,6 +451,7 @@ class EventsPage extends StatefulWidget {
     required this.league,
     required this.competition,
     required this.division,
+    required this.competitionRepository,
     required this.eventRepository,
     required this.driverRepository,
     required this.sessionResultRepository,
@@ -1218,6 +1222,23 @@ class _EventsPageState extends State<EventsPage> {
               ),
               title: Text(standing.teamName),
               subtitle: Text(subtitle),
+              trailing: const Icon(Icons.chevron_right),
+              onTap: () {
+                Navigator.of(context).push(
+                  MaterialPageRoute(
+                    builder: (_) => TeamProfilePage(
+                      teamName: standing.teamName,
+                      league: widget.league,
+                      division: widget.division,
+                      competitionRepository: widget.competitionRepository,
+                      eventRepository: widget.eventRepository,
+                      driverRepository: widget.driverRepository,
+                      sessionResultRepository: widget.sessionResultRepository,
+                      penaltyRepository: widget.penaltyRepository,
+                    ),
+                  ),
+                );
+              },
             );
           },
         ),

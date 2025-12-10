@@ -19,6 +19,7 @@ import '../repositories/validation_issue_repository.dart';
 import '../repositories/penalty_repository.dart';
 
 import 'events_page.dart';
+import 'team_profile_page.dart';
 
 class DivisionsPage extends StatefulWidget {
   final League league;
@@ -366,6 +367,7 @@ class _DivisionsPageState extends State<DivisionsPage> {
                       league: widget.league,
                       competition: _dummyCompetition,
                       division: division,
+                      competitionRepository: widget.competitionRepository,
                       eventRepository: widget.eventRepository,
                       driverRepository: widget.driverRepository,
                       sessionResultRepository:
@@ -461,6 +463,22 @@ class _DivisionsPageState extends State<DivisionsPage> {
               ),
               title: Text(standing.teamName),
               subtitle: Text(subtitle),
+              trailing: const Icon(Icons.chevron_right),
+              onTap: () {
+                Navigator.of(context).push(
+                  MaterialPageRoute(
+                    builder: (_) => TeamProfilePage(
+                      teamName: standing.teamName,
+                      league: widget.league,
+                      competitionRepository: widget.competitionRepository,
+                      eventRepository: widget.eventRepository,
+                      driverRepository: widget.driverRepository,
+                      sessionResultRepository: widget.sessionResultRepository,
+                      penaltyRepository: widget.penaltyRepository,
+                    ),
+                  ),
+                );
+              },
             );
           },
         );
@@ -499,8 +517,26 @@ class _DivisionsPageState extends State<DivisionsPage> {
                       final d = archivedDivisions[index];
                       return ListTile(
                         title: Text(d.name),
+                        trailing: const Icon(Icons.chevron_right),
                         onTap: () {
                           Navigator.of(context).pop();
+                          Navigator.of(context).push(
+                            MaterialPageRoute(
+                              builder: (_) => EventsPage(
+                                league: widget.league,
+                                competition: _dummyCompetition,
+                                division: d,
+                                competitionRepository: widget.competitionRepository,
+                                eventRepository: widget.eventRepository,
+                                driverRepository: widget.driverRepository,
+                                sessionResultRepository:
+                                    widget.sessionResultRepository,
+                                validationIssueRepository:
+                                    widget.validationIssueRepository,
+                                penaltyRepository: widget.penaltyRepository,
+                              ),
+                            ),
+                          );
                         },
                       );
                     },
