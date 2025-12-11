@@ -31,19 +31,104 @@ class SessionPage extends StatefulWidget {
   State<SessionPage> createState() => _SessionPageState();
 }
 
+class _TimeInputFormatter extends TextInputFormatter {
+  @override
+  TextEditingValue formatEditUpdate(
+    TextEditingValue oldValue,
+    TextEditingValue newValue,
+  ) {
+    // Strip all non-digit characters
+    String digitsOnly = newValue.text.replaceAll(RegExp(r'[^0-9]'), '');
+
+    // Limit to 8 digits max (H:MM:SS.mmm = 1+2+2+3)
+    if (digitsOnly.length > 8) {
+      digitsOnly = digitsOnly.substring(0, 8);
+    }
+
+    // Auto-format as user types
+    String formatted = '';
+
+    if (digitsOnly.isEmpty) {
+      return TextEditingValue(
+        text: '',
+        selection: const TextSelection.collapsed(offset: 0),
+      );
+    }
+
+    // Format based on number of digits entered
+    if (digitsOnly.length == 1) {
+      // Just hours: "1"
+      formatted = digitsOnly;
+    } else if (digitsOnly.length == 2) {
+      // Hours and first minute digit: "1:2"
+      formatted = '${digitsOnly[0]}:${digitsOnly[1]}';
+    } else if (digitsOnly.length == 3) {
+      // Hours and minutes: "1:24"
+      formatted = '${digitsOnly[0]}:${digitsOnly.substring(1, 3)}';
+    } else if (digitsOnly.length == 4) {
+      // Hours, minutes, first second: "1:24:3"
+      formatted = '${digitsOnly[0]}:${digitsOnly.substring(1, 3)}:${digitsOnly[3]}';
+    } else if (digitsOnly.length == 5) {
+      // Hours, minutes, seconds: "1:24:35"
+      formatted = '${digitsOnly[0]}:${digitsOnly.substring(1, 3)}:${digitsOnly.substring(3, 5)}';
+    } else if (digitsOnly.length == 6) {
+      // Add first millisecond: "1:24:35.1"
+      formatted = '${digitsOnly[0]}:${digitsOnly.substring(1, 3)}:${digitsOnly.substring(3, 5)}.${digitsOnly[5]}';
+    } else if (digitsOnly.length == 7) {
+      // Add second millisecond: "1:24:35.12"
+      formatted = '${digitsOnly[0]}:${digitsOnly.substring(1, 3)}:${digitsOnly.substring(3, 5)}.${digitsOnly.substring(5, 7)}';
+    } else if (digitsOnly.length == 8) {
+      // Complete format: "1:24:35.123"
+      formatted = '${digitsOnly[0]}:${digitsOnly.substring(1, 3)}:${digitsOnly.substring(3, 5)}.${digitsOnly.substring(5, 8)}';
+    }
+
+    // Validate minutes and seconds don't exceed 59
+    if (digitsOnly.length >= 3) {
+      final minutes = int.parse(digitsOnly.substring(1, 3));
+      if (minutes > 59) {
+        return oldValue; // Reject invalid minutes
+      }
+    }
+
+    if (digitsOnly.length >= 5) {
+      final seconds = int.parse(digitsOnly.substring(3, 5));
+      if (seconds > 59) {
+        return oldValue; // Reject invalid seconds
+      }
+    }
+
+    return TextEditingValue(
+      text: formatted,
+      selection: TextSelection.collapsed(offset: formatted.length),
+    );
+  }
+}
+
+class _ResultEntry {
+  String? driverId; // null means empty slot
+  String? teamName;
+  int? gridPosition;
+  String? status; // null = finished normally, or 'DNF', 'DNS', 'DSQ'
+  int? raceTimeMillis;
+
+  _ResultEntry({
+    this.driverId,
+    this.teamName,
+    this.gridPosition,
+    this.status,
+    this.raceTimeMillis,
+  });
+}
+
 class _SessionPageState extends State<SessionPage> {
   bool _isLoading = true;
   bool _isSaving = false;
   String? _loadError;
 
-  final List<Driver> _drivers = [];
-  final Map<String, SessionResult> _resultsByDriverId = {};
+  final List<Driver> _allDrivers = [];
+  final List<_ResultEntry> _resultEntries = [];
 
-  final Map<String, TextEditingController> _gridControllers = {};
-  final Map<String, TextEditingController> _finishControllers = {};
-  final Map<String, TextEditingController> _timeControllers = {};
-
-  // New: pole & fastest lap
+  // Qualifying & fastest lap
   final TextEditingController _poleLapTimeController = TextEditingController();
   final TextEditingController _fastestLapTimeController =
       TextEditingController();
@@ -67,55 +152,49 @@ class _SessionPageState extends State<SessionPage> {
       final existingResults =
           widget.sessionResultRepository.getResultsForEvent(widget.event.id);
 
-      _drivers
+      _allDrivers
         ..clear()
         ..addAll(drivers);
 
-      _resultsByDriverId.clear();
-      _gridControllers.clear();
-      _finishControllers.clear();
-      _timeControllers.clear();
+      _resultEntries.clear();
 
-      _poleLapTimeController.clear();
-      _fastestLapTimeController.clear();
-      _selectedFastestLapDriverId = null;
+      // Sort existing results by finish position to maintain order
+      final sortedExisting = existingResults.toList()
+        ..sort((a, b) {
+          if (a.finishPosition == null && b.finishPosition == null) return 0;
+          if (a.finishPosition == null) return 1;
+          if (b.finishPosition == null) return -1;
+          return a.finishPosition!.compareTo(b.finishPosition!);
+        });
 
-      final existingByDriverId = {
-        for (final r in existingResults) r.driverId: r,
-      };
-
-      // Build per-driver result objects and controllers
-      for (final driver in _drivers) {
-        final existing = existingByDriverId[driver.id];
-
-        final result = SessionResult(
-          driverId: driver.id,
-          gridPosition: existing?.gridPosition,
-          finishPosition: existing?.finishPosition,
-          raceTimeMillis: existing?.raceTimeMillis,
-          hasFastestLap: existing?.hasFastestLap ?? false,
-          fastestLapMillis: existing?.fastestLapMillis,
-          poleLapMillis: existing?.poleLapMillis,
-        );
-
-        _resultsByDriverId[driver.id] = result;
-
-        _gridControllers[driver.id] = TextEditingController(
-          text: existing?.gridPosition?.toString() ?? '',
-        );
-        _finishControllers[driver.id] = TextEditingController(
-          text: existing?.finishPosition?.toString() ?? '',
-        );
-        _timeControllers[driver.id] = TextEditingController(
-          text: existing?.raceTimeMillis != null
-              ? _formatAbsoluteTime(existing!.raceTimeMillis!)
-              : '',
-        );
+      // Build result entries based on existing data
+      if (sortedExisting.isNotEmpty) {
+        for (final existing in sortedExisting) {
+          final driver = _allDrivers.firstWhere((d) => d.id == existing.driverId);
+          _resultEntries.add(_ResultEntry(
+            driverId: existing.driverId,
+            teamName: driver.teamName,
+            gridPosition: existing.gridPosition,
+            status: existing.finishPosition == null ? 'DNF' : null,
+            raceTimeMillis: existing.raceTimeMillis,
+          ));
+        }
+      } else {
+        // No existing results - create empty entries for all drivers
+        for (final driver in _allDrivers) {
+          _resultEntries.add(_ResultEntry(
+            driverId: driver.id,
+            teamName: driver.teamName,
+            gridPosition: null,
+            status: null,
+            raceTimeMillis: null,
+          ));
+        }
       }
 
-      // If an existing fastest lap is stored, restore selection + time
+      // Restore fastest lap data
       for (final r in existingResults) {
-        if (r.hasFastestLap && _drivers.any((d) => d.id == r.driverId)) {
+        if (r.hasFastestLap && _allDrivers.any((d) => d.id == r.driverId)) {
           _selectedFastestLapDriverId = r.driverId;
           if (r.fastestLapMillis != null) {
             _fastestLapTimeController.text =
@@ -125,7 +204,7 @@ class _SessionPageState extends State<SessionPage> {
         }
       }
 
-      // If an existing pole lap time is stored, restore it
+      // Restore pole lap data
       SessionResult? existingPole;
       for (final r in existingResults) {
         if (r.poleLapMillis != null) {
@@ -149,55 +228,10 @@ class _SessionPageState extends State<SessionPage> {
     }
   }
 
-  void _updateGridPosition(String driverId, String value) {
-    final trimmed = value.trim();
-    final result = _resultsByDriverId[driverId];
-    if (result == null) return;
-
-    if (trimmed.isEmpty) {
-      result.gridPosition = null;
-    } else {
-      final parsed = int.tryParse(trimmed);
-      result.gridPosition = parsed;
-    }
-  }
-
-  void _updateFinishPosition(String driverId, String value) {
-    final trimmed = value.trim();
-    final result = _resultsByDriverId[driverId];
-    if (result == null) return;
-
-    if (trimmed.isEmpty) {
-      result.finishPosition = null;
-    } else {
-      final parsed = int.tryParse(trimmed);
-      result.finishPosition = parsed;
-    }
-  }
-
-  void _updateRaceTime(String driverId, String value) {
-    final trimmed = value.trim();
-    final result = _resultsByDriverId[driverId];
-    if (result == null) return;
-
-    if (trimmed.isEmpty) {
-      result.raceTimeMillis = null;
-      return;
-    }
-
-    final ms = _parseRaceTimeMillis(trimmed);
-    result.raceTimeMillis = ms;
-  }
-
-  /// Parses race time strings such as:
-  /// - "1:14:40.727"  → 1h 14m 40.727s
-  /// - "14:40.727"    → 14m 40.727s
-  /// - "40.727"       → 40.727s
   int? _parseRaceTimeMillis(String input) {
     var s = input.trim();
     if (s.isEmpty) return null;
 
-    // Allow optional leading '+'
     if (s.startsWith('+')) {
       s = s.substring(1).trim();
     }
@@ -212,14 +246,11 @@ class _SessionPageState extends State<SessionPage> {
     int hoursPart = 0;
 
     if (parts.length == 1) {
-      // "SS.SSS"
       secondsPart = double.tryParse(parts[0]) ?? double.nan;
     } else if (parts.length == 2) {
-      // "MM:SS.SSS"
       minutesPart = int.tryParse(parts[0]) ?? -1;
       secondsPart = double.tryParse(parts[1]) ?? double.nan;
     } else {
-      // "HH:MM:SS.SSS"
       hoursPart = int.tryParse(parts[0]) ?? -1;
       minutesPart = int.tryParse(parts[1]) ?? -1;
       secondsPart = double.tryParse(parts[2]) ?? double.nan;
@@ -243,47 +274,55 @@ class _SessionPageState extends State<SessionPage> {
     });
 
     try {
-      final results = _resultsByDriverId.values.toList();
+      final results = <SessionResult>[];
       final issues = <ValidationIssue>[];
 
       final driversById = {
-        for (final d in _drivers) d.id: d,
+        for (final d in _allDrivers) d.id: d,
       };
 
-      final driverCount = _drivers.length;
+      // Build SessionResult objects from entries
+      for (int i = 0; i < _resultEntries.length; i++) {
+        final entry = _resultEntries[i];
 
-      // 1) Validate required fields: grid, finish, time
-      for (final result in results) {
-        final driver = driversById[result.driverId];
+        // Skip empty entries
+        if (entry.driverId == null) continue;
+
+        final finishPosition = i + 1; // Position based on list order
+        final hasStatus = entry.status != null; // DNF, DNS, or DSQ
+
+        final result = SessionResult(
+          driverId: entry.driverId!,
+          gridPosition: entry.gridPosition,
+          finishPosition: hasStatus ? null : finishPosition,
+          raceTimeMillis: entry.raceTimeMillis,
+          hasFastestLap: false,
+          fastestLapMillis: null,
+          poleLapMillis: null,
+        );
+
+        results.add(result);
+
+        final driver = driversById[entry.driverId];
         final driverName = driver?.name ?? 'Unknown driver';
 
-        if (result.gridPosition == null) {
+        // Validate required fields
+        if (entry.gridPosition == null) {
           issues.add(
             _buildIssue(
               eventId: widget.event.id,
-              driverId: result.driverId,
+              driverId: entry.driverId,
               code: 'MISSING_GRID',
               message: 'Missing GRID position for $driverName.',
             ),
           );
         }
 
-        if (result.finishPosition == null) {
+        if (!hasStatus && entry.raceTimeMillis == null) {
           issues.add(
             _buildIssue(
               eventId: widget.event.id,
-              driverId: result.driverId,
-              code: 'MISSING_FINISH',
-              message: 'Missing FINISH position for $driverName.',
-            ),
-          );
-        }
-
-        if (result.raceTimeMillis == null) {
-          issues.add(
-            _buildIssue(
-              eventId: widget.event.id,
-              driverId: result.driverId,
+              driverId: entry.driverId,
               code: 'MISSING_TIME',
               message:
                   'Missing race time for $driverName. Please enter a time such as 1:14:40.727.',
@@ -292,18 +331,17 @@ class _SessionPageState extends State<SessionPage> {
         }
       }
 
-      // 2) Duplicate grid positions
-      final Map<int, List<SessionResult>> gridMap = {};
-      for (final result in results) {
-        final grid = result.gridPosition;
-        if (grid == null) continue;
-        gridMap.putIfAbsent(grid, () => []).add(result);
+      // Check for duplicate grid positions
+      final Map<int, List<String>> gridMap = {};
+      for (final entry in _resultEntries) {
+        if (entry.gridPosition == null || entry.driverId == null) continue;
+        gridMap.putIfAbsent(entry.gridPosition!, () => []).add(entry.driverId!);
       }
 
-      gridMap.forEach((grid, list) {
-        if (list.length > 1) {
-          final names = list
-              .map((r) => driversById[r.driverId]?.name ?? 'Unknown driver')
+      gridMap.forEach((grid, driverIds) {
+        if (driverIds.length > 1) {
+          final names = driverIds
+              .map((id) => driversById[id]?.name ?? 'Unknown driver')
               .join(', ');
           issues.add(
             _buildIssue(
@@ -315,57 +353,7 @@ class _SessionPageState extends State<SessionPage> {
         }
       });
 
-      // 3) Duplicate finish positions
-      final Map<int, List<SessionResult>> finishMap = {};
-      for (final result in results) {
-        final finish = result.finishPosition;
-        if (finish == null) continue;
-        finishMap.putIfAbsent(finish, () => []).add(result);
-      }
-
-      finishMap.forEach((finish, list) {
-        if (list.length > 1) {
-          final names = list
-              .map((r) => driversById[r.driverId]?.name ?? 'Unknown driver')
-              .join(', ');
-          issues.add(
-            _buildIssue(
-              eventId: widget.event.id,
-              code: 'DUPLICATE_FINISH',
-              message: 'Duplicate FINISH position $finish for: $names.',
-            ),
-          );
-        }
-      });
-
-      // 4) Invalid finish range
-      for (final result in results) {
-        final finish = result.finishPosition;
-        if (finish == null) continue;
-        if (finish < 1 || finish > driverCount) {
-          final driverName =
-              driversById[result.driverId]?.name ?? 'Unknown driver';
-          issues.add(
-            _buildIssue(
-              eventId: widget.event.id,
-              driverId: result.driverId,
-              code: 'INVALID_FINISH_RANGE',
-              message:
-                  'Finish position for $driverName should be between 1 and $driverCount.',
-            ),
-          );
-        }
-      }
-
-      // 5) Fastest lap & pole lap (new)
-      // Reset flags
-      for (final r in results) {
-        r.hasFastestLap = false;
-        r.fastestLapMillis = null;
-        r.poleLapMillis = null;
-      }
-
-      // Fastest lap
+      // Handle fastest lap
       final fastestDriverId = _selectedFastestLapDriverId;
       final fastestText = _fastestLapTimeController.text.trim();
       if (fastestDriverId != null && fastestText.isNotEmpty) {
@@ -381,25 +369,16 @@ class _SessionPageState extends State<SessionPage> {
             ),
           );
         } else {
-          final result = _resultsByDriverId[fastestDriverId];
-          if (result == null) {
-            issues.add(
-              _buildIssue(
-                eventId: widget.event.id,
-                driverId: fastestDriverId,
-                code: 'FASTEST_LAP_DRIVER_NOT_FOUND',
-                message:
-                    'Selected fastest lap driver does not have a race result.',
-              ),
-            );
-          } else {
-            result.hasFastestLap = true;
-            result.fastestLapMillis = fastestMs;
-          }
+          final result = results.firstWhere(
+            (r) => r.driverId == fastestDriverId,
+            orElse: () => SessionResult(driverId: fastestDriverId),
+          );
+          result.hasFastestLap = true;
+          result.fastestLapMillis = fastestMs;
         }
       }
 
-      // Pole lap
+      // Handle pole lap
       final poleText = _poleLapTimeController.text.trim();
       if (poleText.isNotEmpty) {
         final poleMs = _parseRaceTimeMillis(poleText);
@@ -476,7 +455,7 @@ class _SessionPageState extends State<SessionPage> {
         return;
       }
 
-      // No issues: clear, save results
+      // No issues: clear and save results
       widget.validationIssueRepository.clearIssuesForEvent(widget.event.id);
       widget.sessionResultRepository
           .saveResultsForEvent(widget.event.id, results);
@@ -530,121 +509,19 @@ class _SessionPageState extends State<SessionPage> {
     final millis = duration.inMilliseconds % 1000;
 
     if (hours > 0) {
-      return '$hours:${minutes.toString().padLeft(2, '0')}:' // HH:MM:
-          '${seconds.toString().padLeft(2, '0')}.'           // SS.
-          '${millis.toString().padLeft(3, '0')}';            // mmm
+      // Format: H:MM:SS.mmm
+      return '$hours:${minutes.toString().padLeft(2, '0')}:'
+          '${seconds.toString().padLeft(2, '0')}.'
+          '${millis.toString().padLeft(3, '0')}';
     } else {
-      return '${minutes.toString().padLeft(1, '0')}:'        // M:
-          '${seconds.toString().padLeft(2, '0')}.'           // SS.
-          '${millis.toString().padLeft(3, '0')}';            // mmm
+      // Format: M:SS.mmm (for times under 1 hour)
+      return '$minutes:${seconds.toString().padLeft(2, '0')}.'
+          '${millis.toString().padLeft(3, '0')}';
     }
-  }
-
-  String _formatGap(int msGap) {
-    final seconds = msGap / 1000.0;
-    return '+${seconds.toStringAsFixed(3)}';
-  }
-
-  /// Uses race times + time penalties to show the live classification.
-  Widget _buildCurrentResultsSummary() {
-    final resultsWithTime = _resultsByDriverId.values
-        .where((r) => r.raceTimeMillis != null)
-        .toList();
-
-    if (resultsWithTime.isEmpty) {
-      return const SizedBox.shrink();
-    }
-
-    // Get time penalties for this event
-    final penalties =
-        widget.penaltyRepository.getPenaltiesForEvent(widget.event.id);
-
-    // driverId -> total time penalty in seconds
-    final Map<String, int> timePenaltySecondsByDriver = {};
-    for (final p in penalties) {
-      if (p.type == 'Time') {
-        timePenaltySecondsByDriver[p.driverId] =
-            (timePenaltySecondsByDriver[p.driverId] ?? 0) + p.value;
-      }
-    }
-
-    final driverById = {for (final d in _drivers) d.id: d};
-
-    // Build working rows with base + adjusted times
-    final rows = resultsWithTime.map((result) {
-      final baseTimeMs = result.raceTimeMillis!;
-      final penaltySec = timePenaltySecondsByDriver[result.driverId] ?? 0;
-      final adjustedTimeMs = baseTimeMs + penaltySec * 1000;
-
-      return {
-        'result': result,
-        'baseTimeMs': baseTimeMs,
-        'adjustedTimeMs': adjustedTimeMs,
-        'penaltySec': penaltySec,
-      };
-    }).toList();
-
-    // Sort by adjusted time (true classification)
-    rows.sort(
-      (a, b) =>
-          (a['adjustedTimeMs'] as int).compareTo(b['adjustedTimeMs'] as int),
-    );
-
-    final leaderAdjustedMs = rows.first['adjustedTimeMs'] as int;
-
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        const Divider(),
-        const Text(
-          'Current results (after time penalties)',
-          style: TextStyle(
-            fontWeight: FontWeight.bold,
-          ),
-        ),
-        const SizedBox(height: 8),
-        ...rows.asMap().entries.map((entry) {
-          final index = entry.key;
-          final row = entry.value;
-
-          final result = row['result'] as SessionResult;
-          final baseTimeMs = row['baseTimeMs'] as int;
-          final adjustedTimeMs = row['adjustedTimeMs'] as int;
-          final penaltySec = row['penaltySec'] as int;
-
-          final driver = driverById[result.driverId];
-          final driverName = driver?.name ?? 'Unknown driver';
-
-          final positionLabel = 'P${index + 1}';
-
-          final text = adjustedTimeMs == leaderAdjustedMs
-              ? _formatAbsoluteTime(baseTimeMs)
-              : _formatGap(adjustedTimeMs - leaderAdjustedMs);
-
-          final penaltyNote = penaltySec != 0
-              ? ' (includes ${penaltySec > 0 ? '+$penaltySec' : penaltySec}s)'
-              : '';
-
-          return Padding(
-            padding: const EdgeInsets.symmetric(vertical: 2),
-            child: Text('$positionLabel: $driverName – $text$penaltyNote'),
-          );
-        }),
-      ],
-    );
   }
 
   @override
   void dispose() {
-    for (final c in _gridControllers.values) {
-      c.dispose();
-    }
-    for (final c in _finishControllers.values) {
-      c.dispose();
-    }
-    for (final c in _timeControllers.values) {
-      c.dispose();
-    }
     _poleLapTimeController.dispose();
     _fastestLapTimeController.dispose();
     super.dispose();
@@ -655,7 +532,7 @@ class _SessionPageState extends State<SessionPage> {
     if (_isLoading) {
       return Scaffold(
         appBar: AppBar(
-          title: Text('Results – ${widget.event.name}'),
+          title: Text(widget.event.name),
         ),
         body: const Center(
           child: CircularProgressIndicator(),
@@ -666,7 +543,7 @@ class _SessionPageState extends State<SessionPage> {
     if (_loadError != null) {
       return Scaffold(
         appBar: AppBar(
-          title: Text('Results – ${widget.event.name}'),
+          title: Text(widget.event.name),
         ),
         body: Center(
           child: Text(_loadError!),
@@ -674,13 +551,41 @@ class _SessionPageState extends State<SessionPage> {
       );
     }
 
-    // get current issues for this event to show a badge if needed
     final issues =
         widget.validationIssueRepository.getIssuesForEvent(widget.event.id);
 
     return Scaffold(
-      appBar: AppBar(
-        title: Text(widget.event.name),
+      body: Container(
+        decoration: BoxDecoration(
+          gradient: LinearGradient(
+            begin: Alignment.topCenter,
+            end: Alignment.bottomCenter,
+            colors: [
+              Colors.black,
+              Colors.grey.shade900,
+              Colors.red.shade900,
+            ],
+            stops: const [0.0, 0.7, 1.0],
+          ),
+        ),
+        child: Column(
+          children: [
+            AppBar(
+        backgroundColor: Colors.transparent,
+        foregroundColor: Colors.white,
+        elevation: 0,
+        title: Row(
+          children: [
+            if (widget.event.flagEmoji != null) ...[
+              Text(
+                widget.event.flagEmoji!,
+                style: const TextStyle(fontSize: 24),
+              ),
+              const SizedBox(width: 8),
+            ],
+            Text(widget.event.name),
+          ],
+        ),
         actions: [
           IconButton(
             tooltip: 'View validation issues',
@@ -715,237 +620,592 @@ class _SessionPageState extends State<SessionPage> {
               ],
             ),
           ),
+          IconButton(
+            tooltip: 'Save results',
+            onPressed: _isSaving ? null : _saveResults,
+            icon: const Icon(Icons.save),
+          ),
         ],
       ),
-      body: Column(
-        children: [
           if (_isSaving)
             const LinearProgressIndicator(
               minHeight: 2,
+              backgroundColor: Colors.transparent,
+              valueColor: AlwaysStoppedAnimation<Color>(Colors.red),
             ),
           Expanded(
-            child: ListView(
-              padding: const EdgeInsets.all(16),
-              children: [
-                _buildQualifyingAndFastestLapSection(),
-                const SizedBox(height: 16),
-                ..._drivers.map(_buildDriverRow),
-                const SizedBox(height: 16),
-                _buildCurrentResultsSummary(),
-                const SizedBox(height: 16),
-              ],
+            child: ScrollConfiguration(
+              behavior: ScrollConfiguration.of(context).copyWith(
+                scrollbars: false,
+              ),
+              child: SingleChildScrollView(
+                padding: const EdgeInsets.all(8),
+                child: Column(
+                  children: [
+                    // Qualifying and fastest lap section
+                    _buildQualifyingAndFastestLapSection(),
+                    const SizedBox(height: 16),
+                    // Results list
+                    ReorderableListView.builder(
+                      shrinkWrap: true,
+                      physics: const NeverScrollableScrollPhysics(),
+                      buildDefaultDragHandles: false,
+                      itemCount: _resultEntries.length + 1, // +1 for header
+                      onReorder: (oldIndex, newIndex) {
+                // Adjust indices to account for header
+                if (oldIndex == 0 || newIndex == 0) return;
+
+                setState(() {
+                  final actualOldIndex = oldIndex - 1;
+                  var actualNewIndex = newIndex - 1;
+
+                  if (actualOldIndex < actualNewIndex) {
+                    actualNewIndex -= 1;
+                  }
+
+                  final item = _resultEntries.removeAt(actualOldIndex);
+                  _resultEntries.insert(actualNewIndex, item);
+                });
+              },
+              itemBuilder: (context, index) {
+                if (index == 0) {
+                  // Header row
+                  return _buildHeaderRow();
+                }
+
+                final entryIndex = index - 1;
+                final entry = _resultEntries[entryIndex];
+                return _buildResultRow(entryIndex, entry);
+              },
+            ),
+          ],
+        ),
+      ),
+    ),
+          ),
+        ],
+      ),
+        ),
+    );
+  }
+
+  Widget _buildHeaderRow() {
+    return Container(
+      key: const ValueKey('header'),
+      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 12),
+      decoration: BoxDecoration(
+        color: const Color(0xFF2A2A2A),
+        borderRadius: BorderRadius.circular(8),
+      ),
+      child: Row(
+        children: [
+          const SizedBox(width: 40), // Space for drag handle
+          const SizedBox(
+            width: 30,
+            child: Text(
+              'Pos.',
+              style: TextStyle(
+                fontWeight: FontWeight.bold,
+                color: Colors.white,
+                fontSize: 12,
+              ),
             ),
           ),
-          SafeArea(
+          Expanded(
             child: Padding(
-              padding: const EdgeInsets.all(16),
-              child: SizedBox(
-                width: double.infinity,
-                child: ElevatedButton.icon(
-                  onPressed: _isSaving ? null : _saveResults,
-                  icon: const Icon(Icons.save),
-                  label: const Text('Save results'),
+              padding: const EdgeInsets.symmetric(horizontal: 4),
+              child: const Text(
+                'Driver',
+                style: TextStyle(
+                  fontWeight: FontWeight.bold,
+                  color: Colors.white,
+                  fontSize: 12,
                 ),
               ),
             ),
           ),
+          const SizedBox(
+            width: 96, // Width for grid +/- buttons
+            child: Text(
+              'Grid',
+              style: TextStyle(
+                fontWeight: FontWeight.bold,
+                color: Colors.white,
+                fontSize: 12,
+              ),
+              textAlign: TextAlign.center,
+            ),
+          ),
         ],
+      ),
+    );
+  }
+
+  Widget _buildResultRow(int index, _ResultEntry entry) {
+    final position = index + 1;
+
+    return Container(
+      key: ValueKey('entry_$index'),
+      margin: const EdgeInsets.only(top: 4),
+      decoration: BoxDecoration(
+        color: const Color(0xFF2A2A2A),
+        borderRadius: BorderRadius.circular(8),
+      ),
+      child: IntrinsicHeight(
+        child: Row(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            // Drag handle
+            ReorderableDragStartListener(
+              index: index + 1, // +1 for header offset
+              child: Container(
+                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 12),
+                child: const Icon(
+                  Icons.drag_indicator,
+                  color: Colors.grey,
+                  size: 20,
+                ),
+              ),
+            ),
+            // Main content in column (two rows)
+            Expanded(
+              child: Padding(
+                padding: const EdgeInsets.symmetric(vertical: 8),
+                child: Column(
+                  children: [
+                    // First row: Position | Driver | Grid
+                    Row(
+                      children: [
+                        // Position
+                        SizedBox(
+                          width: 30,
+                          child: Text(
+                            '$position',
+                            style: const TextStyle(
+                              fontWeight: FontWeight.bold,
+                              color: Colors.white,
+                              fontSize: 16,
+                            ),
+                          ),
+                        ),
+                        // Driver dropdown
+                        Expanded(
+                          child: Padding(
+                            padding: const EdgeInsets.symmetric(horizontal: 4),
+                            child: DropdownButtonFormField<String>(
+                              value: entry.driverId,
+                              dropdownColor: const Color(0xFF3A3A3A),
+                              decoration: const InputDecoration(
+                                contentPadding: EdgeInsets.symmetric(horizontal: 8, vertical: 6),
+                                border: OutlineInputBorder(),
+                                isDense: true,
+                              ),
+                              style: const TextStyle(color: Colors.white, fontSize: 13),
+                              hint: const Text(
+                                'Select driver',
+                                style: TextStyle(color: Colors.grey, fontSize: 13),
+                              ),
+                              items: _allDrivers.map((d) {
+                                return DropdownMenuItem<String>(
+                                  value: d.id,
+                                  child: Text(d.name),
+                                );
+                              }).toList(),
+                              onChanged: (value) {
+                                setState(() {
+                                  entry.driverId = value;
+                                  if (value != null) {
+                                    final selectedDriver =
+                                        _allDrivers.firstWhere((d) => d.id == value);
+                                    entry.teamName = selectedDriver.teamName;
+                                  }
+                                });
+                              },
+                            ),
+                          ),
+                        ),
+                        // Grid position with +/- buttons
+                        Row(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            IconButton(
+                              icon: const Icon(Icons.remove, color: Colors.white, size: 18),
+                              onPressed: () {
+                                setState(() {
+                                  if (entry.gridPosition != null && entry.gridPosition! > 1) {
+                                    entry.gridPosition = entry.gridPosition! - 1;
+                                  }
+                                });
+                              },
+                              padding: EdgeInsets.zero,
+                              constraints: const BoxConstraints(minWidth: 32, minHeight: 32),
+                            ),
+                            SizedBox(
+                              width: 30,
+                              child: Text(
+                                entry.gridPosition?.toString() ?? '1',
+                                textAlign: TextAlign.center,
+                                style: const TextStyle(
+                                  color: Colors.white,
+                                  fontSize: 14,
+                                  fontWeight: FontWeight.bold,
+                                ),
+                              ),
+                            ),
+                            IconButton(
+                              icon: const Icon(Icons.add, color: Colors.white, size: 18),
+                              onPressed: () {
+                                setState(() {
+                                  entry.gridPosition = (entry.gridPosition ?? 0) + 1;
+                                });
+                              },
+                              padding: EdgeInsets.zero,
+                              constraints: const BoxConstraints(minWidth: 32, minHeight: 32),
+                            ),
+                          ],
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: 8),
+                    // Second row: Status checkbox | Team dropdown
+                    Row(
+                      children: [
+                        const SizedBox(width: 30), // Align with position above
+                        // Status checkbox with label
+                        Row(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            Checkbox(
+                              value: entry.status != null,
+                              onChanged: (checked) {
+                                setState(() {
+                                  if (checked == true) {
+                                    entry.status = 'DNF';
+                                  } else {
+                                    entry.status = null;
+                                  }
+                                });
+                              },
+                              activeColor: Colors.red,
+                            ),
+                            if (entry.status != null)
+                              SizedBox(
+                                width: 70,
+                                child: DropdownButton<String>(
+                                  value: entry.status,
+                                  dropdownColor: const Color(0xFF3A3A3A),
+                                  style: const TextStyle(color: Colors.white, fontSize: 12),
+                                  underline: const SizedBox(),
+                                  isExpanded: true,
+                                  items: const [
+                                    DropdownMenuItem(value: 'DNF', child: Text('DNF')),
+                                    DropdownMenuItem(value: 'DNS', child: Text('DNS')),
+                                    DropdownMenuItem(value: 'DSQ', child: Text('DSQ')),
+                                  ],
+                                  onChanged: (value) {
+                                    setState(() {
+                                      entry.status = value;
+                                    });
+                                  },
+                                ),
+                              )
+                            else
+                              const Text(
+                                'OUT',
+                                style: TextStyle(color: Colors.grey, fontSize: 12),
+                              ),
+                          ],
+                        ),
+                        const SizedBox(width: 8),
+                        // Team dropdown
+                        Expanded(
+                          child: Padding(
+                            padding: const EdgeInsets.only(right: 4),
+                            child: DropdownButtonFormField<String>(
+                              value: entry.teamName,
+                              dropdownColor: const Color(0xFF3A3A3A),
+                              decoration: const InputDecoration(
+                                contentPadding: EdgeInsets.symmetric(horizontal: 8, vertical: 6),
+                                border: OutlineInputBorder(),
+                                isDense: true,
+                              ),
+                              style: const TextStyle(color: Colors.white, fontSize: 13),
+                              hint: const Text(
+                                'Select team',
+                                style: TextStyle(color: Colors.grey, fontSize: 13),
+                              ),
+                              items: _allDrivers
+                                  .where((d) => d.teamName != null)
+                                  .map((d) => d.teamName!)
+                                  .toSet()
+                                  .map((team) {
+                                return DropdownMenuItem<String>(
+                                  value: team,
+                                  child: Text(team),
+                                );
+                              }).toList(),
+                              onChanged: (value) {
+                                setState(() {
+                                  entry.teamName = value;
+                                });
+                              },
+                            ),
+                          ),
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: 8),
+                    // Third row: Time input
+                    Row(
+                      children: [
+                        const SizedBox(width: 30), // Align with position above
+                        Expanded(
+                          child: Padding(
+                            padding: const EdgeInsets.symmetric(horizontal: 4),
+                            child: TextFormField(
+                              key: ValueKey('time_${entry.driverId}_$index'),
+                              initialValue: entry.raceTimeMillis != null
+                                  ? _formatAbsoluteTime(entry.raceTimeMillis!)
+                                  : '',
+                              enabled: entry.status == null,
+                              style: const TextStyle(
+                                color: Colors.white,
+                                fontSize: 14,
+                                fontWeight: FontWeight.w600,
+                                fontFamily: 'monospace',
+                                letterSpacing: 1.2,
+                              ),
+                              decoration: InputDecoration(
+                                labelText: 'Time (H:MM:SS.mmm)',
+                                labelStyle: TextStyle(
+                                  color: entry.status == null ? Colors.red.shade400 : Colors.grey.shade600,
+                                  fontSize: 12,
+                                ),
+                                hintText: 'e.g., 1:24:35.123',
+                                hintStyle: TextStyle(color: Colors.grey.shade700, fontSize: 11),
+                                contentPadding: const EdgeInsets.symmetric(horizontal: 8, vertical: 6),
+                                filled: true,
+                                fillColor: entry.status == null ? Colors.black87 : Colors.grey.shade900,
+                                border: OutlineInputBorder(
+                                  borderRadius: BorderRadius.circular(8),
+                                ),
+                                enabledBorder: OutlineInputBorder(
+                                  borderRadius: BorderRadius.circular(8),
+                                  borderSide: BorderSide(color: Colors.grey.shade800, width: 1.5),
+                                ),
+                                focusedBorder: OutlineInputBorder(
+                                  borderRadius: BorderRadius.circular(8),
+                                  borderSide: BorderSide(color: Colors.red.shade600, width: 2),
+                                ),
+                                disabledBorder: OutlineInputBorder(
+                                  borderRadius: BorderRadius.circular(8),
+                                  borderSide: BorderSide(color: Colors.grey.shade900, width: 1),
+                                ),
+                                isDense: true,
+                              ),
+                              inputFormatters: [_TimeInputFormatter()],
+                              onChanged: (value) {
+                                setState(() {
+                                  entry.raceTimeMillis = _parseRaceTimeMillis(value);
+                                });
+                              },
+                            ),
+                          ),
+                        ),
+                        const SizedBox(width: 4),
+                      ],
+                    ),
+                  ],
+                ),
+              ),
+            ),
+          ],
+        ),
       ),
     );
   }
 
   Widget _buildQualifyingAndFastestLapSection() {
-    return Card(
-      margin: const EdgeInsets.only(bottom: 12),
-      child: Padding(
-        padding: const EdgeInsets.all(12),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            const Text(
-              'Qualifying & fastest lap',
-              style: TextStyle(
-                fontWeight: FontWeight.bold,
-              ),
-            ),
-            const SizedBox(height: 12),
-            TextField(
-              controller: _poleLapTimeController,
-              keyboardType: TextInputType.number,
-              inputFormatters: [
-                RaceTimeInputFormatter(),
-              ],
-              decoration: const InputDecoration(
-                labelText: 'Pole lap time',
-                hintText: '_:__:__.___  (H:MM:SS.mmm)',
-                helperText: 'Example: 1:14:40.727',
-                border: OutlineInputBorder(),
-              ),
-            ),
-            const SizedBox(height: 12),
-            DropdownButtonFormField<String>(
-              // ignore: deprecated_member_use
-              value: _selectedFastestLapDriverId,
-              decoration: const InputDecoration(
-                labelText: 'Fastest lap – driver',
-                border: OutlineInputBorder(),
-              ),
-              items: _drivers
-                  .map(
-                    (d) => DropdownMenuItem<String>(
-                      value: d.id,
-                      child: Text(d.name),
-                    ),
-                  )
-                  .toList(),
-              onChanged: (value) {
-                setState(() {
-                  _selectedFastestLapDriverId = value;
-                });
-              },
-            ),
-            const SizedBox(height: 8),
-            TextField(
-              controller: _fastestLapTimeController,
-              keyboardType: TextInputType.number,
-              inputFormatters: [
-                RaceTimeInputFormatter(),
-              ],
-              decoration: const InputDecoration(
-                labelText: 'Fastest lap time',
-                hintText: '_:__:__.___  (H:MM:SS.mmm)',
-                helperText: 'Example: 1:17:09.832',
-                border: OutlineInputBorder(),
-              ),
-            ),
+    return Container(
+      padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(
+        gradient: LinearGradient(
+          begin: Alignment.topLeft,
+          end: Alignment.bottomRight,
+          colors: [
+            Colors.grey.shade900,
+            Colors.black87,
           ],
         ),
-      ),
-    );
-  }
-
-  Widget _buildDriverRow(Driver driver) {
-    // ignore: unused_local_variable
-    final result = _resultsByDriverId[driver.id]!;
-
-    final gridController = _gridControllers[driver.id]!;
-    final finishController = _finishControllers[driver.id]!;
-    final timeController = _timeControllers[driver.id]!;
-
-    return Card(
-      margin: const EdgeInsets.only(bottom: 12),
-      child: Padding(
-        padding: const EdgeInsets.all(12),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Text(
-              driver.name,
-              style: const TextStyle(
-                fontWeight: FontWeight.bold,
-              ),
-            ),
-            const SizedBox(height: 8),
-            Row(
-              children: [
-                Expanded(
-                  child: TextField(
-                    controller: gridController,
-                    keyboardType: TextInputType.number,
-                    decoration: const InputDecoration(
-                      labelText: 'Grid',
-                      border: OutlineInputBorder(),
-                    ),
-                    onChanged: (value) =>
-                        _updateGridPosition(driver.id, value),
-                  ),
-                ),
-                const SizedBox(width: 8),
-                Expanded(
-                  child: TextField(
-                    controller: finishController,
-                    keyboardType: TextInputType.number,
-                    decoration: const InputDecoration(
-                      labelText: 'Finish',
-                      border: OutlineInputBorder(),
-                    ),
-                    onChanged: (value) =>
-                        _updateFinishPosition(driver.id, value),
-                  ),
-                ),
-              ],
-            ),
-            const SizedBox(height: 8),
-            TextField(
-              controller: timeController,
-              keyboardType: TextInputType.number,
-              inputFormatters: [
-                RaceTimeInputFormatter(),
-              ],
-              decoration: const InputDecoration(
-                labelText: 'Race time',
-                hintText: '_:__:__.___  (H:MM:SS.mmm)',
-                helperText: 'Example: 1:14:40.727',
-                border: OutlineInputBorder(),
-              ),
-              onChanged: (value) => _updateRaceTime(driver.id, value),
-            ),
-          ],
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(
+          color: Colors.red.shade800,
+          width: 2,
         ),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.red.withAlpha(76),
+            blurRadius: 20,
+            spreadRadius: 2,
+          ),
+        ],
       ),
-    );
-  }
-}
-
-/// Input formatter that locks the race time field to H:MM:SS.mmm
-class RaceTimeInputFormatter extends TextInputFormatter {
-  // We expect exactly 8 digits: H MM SS mmm  →  1 + 2 + 2 + 3
-  static const int _maxDigits = 8;
-
-  @override
-  TextEditingValue formatEditUpdate(
-    TextEditingValue oldValue,
-    TextEditingValue newValue,
-  ) {
-    // Remove anything that isn't a digit
-    var digits = newValue.text.replaceAll(RegExp(r'\D'), '');
-    if (digits.length > _maxDigits) {
-      digits = digits.substring(0, _maxDigits);
-    }
-
-    final buffer = StringBuffer();
-    final len = digits.length;
-
-    // Hours (1 digit)
-    if (len >= 1) {
-      buffer.write(digits[0]);
-    }
-
-    // Minutes (2 digits)
-    if (len >= 2) {
-      buffer.write(':');
-      final end = len >= 3 ? 3 : len;
-      buffer.write(digits.substring(1, end));
-    }
-
-    // Seconds (2 digits)
-    if (len >= 4) {
-      buffer.write(':');
-      final end = len >= 5 ? 5 : len;
-      buffer.write(digits.substring(3, end));
-    }
-
-    // Milliseconds (3 digits)
-    if (len >= 6) {
-      buffer.write('.');
-      buffer.write(digits.substring(5));
-    }
-
-    final text = buffer.toString();
-
-    return TextEditingValue(
-      text: text,
-      selection: TextSelection.collapsed(offset: text.length),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              Icon(
+                Icons.emoji_events,
+                color: Colors.red.shade600,
+                size: 24,
+              ),
+              const SizedBox(width: 12),
+              const Text(
+                'QUALIFYING & FASTEST LAP',
+                style: TextStyle(
+                  color: Colors.white,
+                  fontSize: 16,
+                  fontWeight: FontWeight.w800,
+                  letterSpacing: 1.5,
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 16),
+          Row(
+            children: [
+              // Pole lap time
+              Expanded(
+                child: TextField(
+                  controller: _poleLapTimeController,
+                  style: const TextStyle(
+                    color: Colors.white,
+                    fontSize: 14,
+                    fontWeight: FontWeight.w600,
+                    fontFamily: 'monospace',
+                    letterSpacing: 1.2,
+                  ),
+                  decoration: InputDecoration(
+                    labelText: 'POLE LAP TIME',
+                    labelStyle: TextStyle(
+                      color: Colors.red.shade400,
+                      fontSize: 12,
+                      fontWeight: FontWeight.w600,
+                      letterSpacing: 1,
+                    ),
+                    hintText: 'e.g., 1:14.123',
+                    hintStyle: TextStyle(color: Colors.grey.shade600, fontSize: 11),
+                    contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                    filled: true,
+                    fillColor: Colors.black87,
+                    border: OutlineInputBorder(
+                      borderRadius: BorderRadius.circular(8),
+                    ),
+                    enabledBorder: OutlineInputBorder(
+                      borderRadius: BorderRadius.circular(8),
+                      borderSide: BorderSide(color: Colors.grey.shade800, width: 1.5),
+                    ),
+                    focusedBorder: OutlineInputBorder(
+                      borderRadius: BorderRadius.circular(8),
+                      borderSide: BorderSide(color: Colors.red.shade600, width: 2),
+                    ),
+                    isDense: true,
+                  ),
+                  inputFormatters: [_TimeInputFormatter()],
+                ),
+              ),
+              const SizedBox(width: 12),
+              // Fastest lap time
+              Expanded(
+                child: TextField(
+                  controller: _fastestLapTimeController,
+                  style: const TextStyle(
+                    color: Colors.white,
+                    fontSize: 14,
+                    fontWeight: FontWeight.w600,
+                    fontFamily: 'monospace',
+                    letterSpacing: 1.2,
+                  ),
+                  decoration: InputDecoration(
+                    labelText: 'FASTEST LAP TIME',
+                    labelStyle: TextStyle(
+                      color: Colors.red.shade400,
+                      fontSize: 12,
+                      fontWeight: FontWeight.w600,
+                      letterSpacing: 1,
+                    ),
+                    hintText: 'e.g., 1:15.456',
+                    hintStyle: TextStyle(color: Colors.grey.shade600, fontSize: 11),
+                    contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                    filled: true,
+                    fillColor: Colors.black87,
+                    border: OutlineInputBorder(
+                      borderRadius: BorderRadius.circular(8),
+                    ),
+                    enabledBorder: OutlineInputBorder(
+                      borderRadius: BorderRadius.circular(8),
+                      borderSide: BorderSide(color: Colors.grey.shade800, width: 1.5),
+                    ),
+                    focusedBorder: OutlineInputBorder(
+                      borderRadius: BorderRadius.circular(8),
+                      borderSide: BorderSide(color: Colors.red.shade600, width: 2),
+                    ),
+                    isDense: true,
+                  ),
+                  inputFormatters: [_TimeInputFormatter()],
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 12),
+          // Fastest lap driver dropdown
+          DropdownButtonFormField<String>(
+            value: _selectedFastestLapDriverId,
+            dropdownColor: Colors.grey.shade900,
+            decoration: InputDecoration(
+              labelText: 'FASTEST LAP DRIVER',
+              labelStyle: TextStyle(
+                color: Colors.red.shade400,
+                fontSize: 12,
+                fontWeight: FontWeight.w600,
+                letterSpacing: 1,
+              ),
+              contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+              filled: true,
+              fillColor: Colors.black87,
+              border: OutlineInputBorder(
+                borderRadius: BorderRadius.circular(8),
+              ),
+              enabledBorder: OutlineInputBorder(
+                borderRadius: BorderRadius.circular(8),
+                borderSide: BorderSide(color: Colors.grey.shade800, width: 1.5),
+              ),
+              focusedBorder: OutlineInputBorder(
+                borderRadius: BorderRadius.circular(8),
+                borderSide: BorderSide(color: Colors.red.shade600, width: 2),
+              ),
+              isDense: true,
+            ),
+            style: const TextStyle(color: Colors.white, fontSize: 13),
+            hint: Text(
+              'Select driver',
+              style: TextStyle(color: Colors.grey.shade600, fontSize: 13),
+            ),
+            items: _allDrivers.map((d) {
+              return DropdownMenuItem<String>(
+                value: d.id,
+                child: Text(d.name),
+              );
+            }).toList(),
+            onChanged: (value) {
+              setState(() {
+                _selectedFastestLapDriverId = value;
+              });
+            },
+          ),
+        ],
+      ),
     );
   }
 }
