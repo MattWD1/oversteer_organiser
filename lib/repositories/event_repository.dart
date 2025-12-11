@@ -11,6 +11,14 @@ abstract class EventRepository {
     String? flagEmoji,
   });
 
+  /// Updates event date and time
+  Future<void> updateEventTime({
+    required String eventId,
+    required DateTime date,
+    DateTime? startTime,
+    DateTime? endTime,
+  });
+
   /// Deletes an event by ID
   Future<void> deleteEvent(String eventId);
 }
@@ -73,6 +81,31 @@ class InMemoryEventRepository implements EventRepository {
     _events.add(newEvent);
 
     return newId;
+  }
+
+  @override
+  Future<void> updateEventTime({
+    required String eventId,
+    required DateTime date,
+    DateTime? startTime,
+    DateTime? endTime,
+  }) async {
+    await Future.delayed(const Duration(milliseconds: 100));
+
+    final index = _events.indexWhere((e) => e.id == eventId);
+    if (index != -1) {
+      final oldEvent = _events[index];
+      final updatedEvent = Event(
+        id: oldEvent.id,
+        divisionId: oldEvent.divisionId,
+        name: oldEvent.name,
+        date: date,
+        flagEmoji: oldEvent.flagEmoji,
+        startTime: startTime,
+        endTime: endTime,
+      );
+      _events[index] = updatedEvent;
+    }
   }
 
   @override

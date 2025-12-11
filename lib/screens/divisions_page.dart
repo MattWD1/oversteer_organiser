@@ -20,6 +20,7 @@ import '../repositories/penalty_repository.dart';
 
 import 'events_page.dart';
 import 'team_profile_page.dart';
+import 'league_settings_page.dart';
 
 class DivisionsPage extends StatefulWidget {
   final League league;
@@ -681,8 +682,22 @@ class _DivisionsPageState extends State<DivisionsPage> {
 
     return Scaffold(
       appBar: AppBar(
-        title: Text('Divisions – ${widget.league.name}'),
+        title: Text(widget.league.name),
         actions: [
+          IconButton(
+            tooltip: 'League Settings',
+            icon: const Icon(Icons.settings),
+            onPressed: () {
+              Navigator.of(context).push(
+                MaterialPageRoute(
+                  builder: (_) => LeagueSettingsPage(
+                    league: widget.league,
+                    competitionRepository: widget.competitionRepository,
+                  ),
+                ),
+              );
+            },
+          ),
           IconButton(
             tooltip: 'View archive',
             icon: const Icon(Icons.archive_outlined),

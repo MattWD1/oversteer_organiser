@@ -6,6 +6,8 @@ import 'package:flutter/services.dart';
 import 'session_page.dart';
 import 'driver_profile_page.dart';
 import 'team_profile_page.dart';
+import 'division_settings_page.dart';
+import 'division_information_page.dart';
 
 import '../models/league.dart';
 import '../models/competition.dart';
@@ -739,6 +741,196 @@ class _EventsPageState extends State<EventsPage> {
     }
   }
 
+  // ---------- Set event date/time ----------
+
+  Future<void> _showSetDateTimeDialog(Event event) async {
+    DateTime selectedDate = event.date;
+    TimeOfDay? selectedStartTime = event.startTime != null
+        ? TimeOfDay.fromDateTime(event.startTime!)
+        : null;
+    TimeOfDay? selectedEndTime = event.endTime != null
+        ? TimeOfDay.fromDateTime(event.endTime!)
+        : null;
+
+    await showDialog(
+      context: context,
+      builder: (context) {
+        return StatefulBuilder(
+          builder: (context, setDialogState) {
+            return AlertDialog(
+              title: Text('Set Date & Time for ${event.name}'),
+              content: SingleChildScrollView(
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    const Text(
+                      'Race Date',
+                      style: TextStyle(fontWeight: FontWeight.bold),
+                    ),
+                    const SizedBox(height: 8),
+                    ElevatedButton.icon(
+                      onPressed: () async {
+                        final date = await showDatePicker(
+                          context: context,
+                          initialDate: selectedDate,
+                          firstDate: DateTime(2020),
+                          lastDate: DateTime(2030),
+                        );
+                        if (date != null) {
+                          setDialogState(() {
+                            selectedDate = date;
+                          });
+                        }
+                      },
+                      icon: const Icon(Icons.calendar_today),
+                      label: Text(
+                        '${selectedDate.day}/${selectedDate.month}/${selectedDate.year}',
+                      ),
+                    ),
+                    const SizedBox(height: 16),
+                    const Text(
+                      'Start Time',
+                      style: TextStyle(fontWeight: FontWeight.bold),
+                    ),
+                    const SizedBox(height: 8),
+                    Row(
+                      children: [
+                        ElevatedButton.icon(
+                          onPressed: () async {
+                            final time = await showTimePicker(
+                              context: context,
+                              initialTime: selectedStartTime ??
+                                  const TimeOfDay(hour: 14, minute: 0),
+                            );
+                            if (time != null) {
+                              setDialogState(() {
+                                selectedStartTime = time;
+                              });
+                            }
+                          },
+                          icon: const Icon(Icons.access_time),
+                          label: Text(
+                            selectedStartTime?.format(context) ?? 'Set Time',
+                          ),
+                        ),
+                        if (selectedStartTime != null) ...[
+                          const SizedBox(width: 8),
+                          IconButton(
+                            icon: const Icon(Icons.clear),
+                            onPressed: () {
+                              setDialogState(() {
+                                selectedStartTime = null;
+                              });
+                            },
+                            tooltip: 'Clear',
+                          ),
+                        ],
+                      ],
+                    ),
+                    const SizedBox(height: 16),
+                    const Text(
+                      'End Time',
+                      style: TextStyle(fontWeight: FontWeight.bold),
+                    ),
+                    const SizedBox(height: 8),
+                    Row(
+                      children: [
+                        ElevatedButton.icon(
+                          onPressed: () async {
+                            final time = await showTimePicker(
+                              context: context,
+                              initialTime: selectedEndTime ??
+                                  const TimeOfDay(hour: 16, minute: 0),
+                            );
+                            if (time != null) {
+                              setDialogState(() {
+                                selectedEndTime = time;
+                              });
+                            }
+                          },
+                          icon: const Icon(Icons.access_time),
+                          label: Text(
+                            selectedEndTime?.format(context) ?? 'Set Time',
+                          ),
+                        ),
+                        if (selectedEndTime != null) ...[
+                          const SizedBox(width: 8),
+                          IconButton(
+                            icon: const Icon(Icons.clear),
+                            onPressed: () {
+                              setDialogState(() {
+                                selectedEndTime = null;
+                              });
+                            },
+                            tooltip: 'Clear',
+                          ),
+                        ],
+                      ],
+                    ),
+                  ],
+                ),
+              ),
+              actions: [
+                TextButton(
+                  onPressed: () => Navigator.of(context).pop(),
+                  child: const Text('Cancel'),
+                ),
+                ElevatedButton(
+                  onPressed: () async {
+                    DateTime? startDateTime;
+                    DateTime? endDateTime;
+
+                    if (selectedStartTime != null) {
+                      startDateTime = DateTime(
+                        selectedDate.year,
+                        selectedDate.month,
+                        selectedDate.day,
+                        selectedStartTime!.hour,
+                        selectedStartTime!.minute,
+                      );
+                    }
+
+                    if (selectedEndTime != null) {
+                      endDateTime = DateTime(
+                        selectedDate.year,
+                        selectedDate.month,
+                        selectedDate.day,
+                        selectedEndTime!.hour,
+                        selectedEndTime!.minute,
+                      );
+                    }
+
+                    await widget.eventRepository.updateEventTime(
+                      eventId: event.id,
+                      date: selectedDate,
+                      startTime: startDateTime,
+                      endTime: endDateTime,
+                    );
+
+                    setState(() {
+                      _futureEvents = widget.eventRepository
+                          .getEventsForDivision(widget.division.id);
+                    });
+
+                    if (!mounted) return;
+                    Navigator.of(context).pop();
+                    ScaffoldMessenger.of(context).showSnackBar(
+                      SnackBar(
+                        content: Text('Date and time updated for ${event.name}'),
+                      ),
+                    );
+                  },
+                  child: const Text('Save'),
+                ),
+              ],
+            );
+          },
+        );
+      },
+    );
+  }
+
   // ---------- Add event: F1 track picker + custom ----------
 
   void _showAddEventSheet() {
@@ -1061,6 +1253,9 @@ class _EventsPageState extends State<EventsPage> {
                       ),
                     );
                   },
+                  onLongPress: () {
+                    _showSetDateTimeDialog(event);
+                  },
                 ),
               );
             },
@@ -1338,7 +1533,41 @@ class _EventsPageState extends State<EventsPage> {
 
     return Scaffold(
       appBar: AppBar(
-        title: Text('Events – ${widget.division.name}'),
+        title: Text(widget.division.name),
+        actions: [
+          IconButton(
+            icon: const Icon(Icons.info_outline),
+            onPressed: () {
+              Navigator.of(context).push(
+                MaterialPageRoute(
+                  builder: (_) => DivisionInformationPage(
+                    league: widget.league,
+                    division: widget.division,
+                    eventRepository: widget.eventRepository,
+                  ),
+                ),
+              );
+            },
+            tooltip: 'Division Information',
+          ),
+          IconButton(
+            icon: const Icon(Icons.settings),
+            onPressed: () {
+              Navigator.of(context).push(
+                MaterialPageRoute(
+                  builder: (_) => DivisionSettingsPage(
+                    league: widget.league,
+                    competition: widget.competition,
+                    division: widget.division,
+                    competitionRepository: widget.competitionRepository,
+                    eventRepository: widget.eventRepository,
+                  ),
+                ),
+              );
+            },
+            tooltip: 'Division Settings',
+          ),
+        ],
       ),
       body: body,
       bottomNavigationBar: BottomNavigationBar(

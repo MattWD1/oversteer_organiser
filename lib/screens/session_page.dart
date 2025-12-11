@@ -680,7 +680,7 @@ class _SessionPageState extends State<SessionPage> {
 
     return Scaffold(
       appBar: AppBar(
-        title: Text('Results – ${widget.event.name}'),
+        title: Text(widget.event.name),
         actions: [
           IconButton(
             tooltip: 'View validation issues',
