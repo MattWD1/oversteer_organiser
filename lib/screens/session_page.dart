@@ -10,6 +10,7 @@ import '../repositories/session_result_repository.dart';
 import '../repositories/validation_issue_repository.dart';
 import '../repositories/penalty_repository.dart';
 import 'validation_issues_page.dart';
+import 'session_results_view_page.dart';
 
 class SessionPage extends StatefulWidget {
   final Event event;
@@ -181,11 +182,13 @@ class _SessionPageState extends State<SessionPage> {
         }
       } else {
         // No existing results - create empty entries for all drivers
-        for (final driver in _allDrivers) {
+        // Initialize grid positions to sequential values (1, 2, 3, ...)
+        for (int i = 0; i < _allDrivers.length; i++) {
+          final driver = _allDrivers[i];
           _resultEntries.add(_ResultEntry(
             driverId: driver.id,
             teamName: driver.teamName,
-            gridPosition: null,
+            gridPosition: i + 1, // Set to actual position instead of null
             status: null,
             raceTimeMillis: null,
           ));
@@ -621,6 +624,21 @@ class _SessionPageState extends State<SessionPage> {
             ),
           ),
           IconButton(
+            tooltip: 'View results',
+            onPressed: () {
+              Navigator.of(context).push(
+                MaterialPageRoute(
+                  builder: (_) => SessionResultsViewPage(
+                    event: widget.event,
+                    driverRepository: widget.driverRepository,
+                    sessionResultRepository: widget.sessionResultRepository,
+                  ),
+                ),
+              );
+            },
+            icon: const Icon(Icons.visibility),
+          ),
+          IconButton(
             tooltip: 'Save results',
             onPressed: _isSaving ? null : _saveResults,
             icon: const Icon(Icons.save),
@@ -843,7 +861,7 @@ class _SessionPageState extends State<SessionPage> {
                             SizedBox(
                               width: 30,
                               child: Text(
-                                entry.gridPosition?.toString() ?? '1',
+                                entry.gridPosition?.toString() ?? '-',
                                 textAlign: TextAlign.center,
                                 style: const TextStyle(
                                   color: Colors.white,

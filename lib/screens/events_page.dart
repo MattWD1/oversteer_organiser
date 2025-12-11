@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
 import 'session_page.dart';
+import 'session_results_view_page.dart';
 import 'driver_profile_page.dart';
 import 'team_profile_page.dart';
 import 'division_settings_page.dart';
@@ -508,6 +509,14 @@ class _EventsPageState extends State<EventsPage> {
       }
     } catch (_) {}
     return '🏁';
+  }
+
+  bool _areResultsComplete(String eventId) {
+    final results = widget.sessionResultRepository.getResultsForEvent(eventId);
+    if (results.isEmpty) return false;
+
+    // Check if at least one result has a finish position (indicating race is complete)
+    return results.any((result) => result.finishPosition != null);
   }
 
   // ---------- Rankings + division data loaders ----------
@@ -1180,65 +1189,37 @@ class _EventsPageState extends State<EventsPage> {
 
               return Dismissible(
                 key: Key(event.id),
-                direction: DismissDirection.startToEnd,
+                direction: DismissDirection.horizontal,
                 confirmDismiss: (direction) async {
-                  return await showDialog<bool>(
-                    context: context,
-                    builder: (context) => AlertDialog(
-                      title: const Text('Delete Event'),
-                      content: Text(
-                        'Are you sure you want to delete "$name"?\n\n'
-                        'This action cannot be undone.',
-                      ),
-                      actions: [
-                        TextButton(
-                          onPressed: () => Navigator.of(context).pop(false),
-                          child: const Text('Cancel'),
+                  // Only show confirmation dialog for delete (swipe right)
+                  if (direction == DismissDirection.startToEnd) {
+                    return await showDialog<bool>(
+                      context: context,
+                      builder: (context) => AlertDialog(
+                        title: const Text('Delete Event'),
+                        content: Text(
+                          'Are you sure you want to delete "$name"?\n\n'
+                          'This action cannot be undone.',
                         ),
-                        ElevatedButton(
-                          onPressed: () => Navigator.of(context).pop(true),
-                          style: ElevatedButton.styleFrom(
-                            backgroundColor: Colors.red,
-                            foregroundColor: Colors.white,
+                        actions: [
+                          TextButton(
+                            onPressed: () => Navigator.of(context).pop(false),
+                            child: const Text('Cancel'),
                           ),
-                          child: const Text('Delete'),
-                        ),
-                      ],
-                    ),
-                  );
-                },
-                onDismissed: (direction) async {
-                  await widget.eventRepository.deleteEvent(event.id);
-                  setState(() {
-                    _futureEvents = widget.eventRepository
-                        .getEventsForDivision(widget.division.id);
-                  });
-                  if (!mounted) return;
-                  // ignore: use_build_context_synchronously
-                  ScaffoldMessenger.of(context).showSnackBar(
-                    SnackBar(
-                      content: Text('"$name" has been deleted'),
-                    ),
-                  );
-                },
-                background: Container(
-                  color: Colors.red,
-                  alignment: Alignment.centerLeft,
-                  padding: const EdgeInsets.only(left: 20),
-                  child: const Icon(
-                    Icons.delete,
-                    color: Colors.white,
-                    size: 32,
-                  ),
-                ),
-                child: ListTile(
-                  leading: Text(
-                    flag,
-                    style: const TextStyle(fontSize: 24),
-                  ),
-                  title: Text(name),
-                  trailing: const Icon(Icons.chevron_right),
-                  onTap: () {
+                          ElevatedButton(
+                            onPressed: () => Navigator.of(context).pop(true),
+                            style: ElevatedButton.styleFrom(
+                              backgroundColor: Colors.red,
+                              foregroundColor: Colors.white,
+                            ),
+                            child: const Text('Delete'),
+                          ),
+                        ],
+                      ),
+                    );
+                  }
+                  // For edit (swipe left), navigate and return false to prevent dismissal
+                  if (direction == DismissDirection.endToStart) {
                     Navigator.of(context).push(
                       MaterialPageRoute(
                         builder: (_) => SessionPage(
@@ -1252,6 +1233,122 @@ class _EventsPageState extends State<EventsPage> {
                         ),
                       ),
                     );
+                    return false; // Don't dismiss the item
+                  }
+                  return false;
+                },
+                onDismissed: (direction) async {
+                  // Only delete is handled here since edit navigation happens in confirmDismiss
+                  if (direction == DismissDirection.startToEnd) {
+                    await widget.eventRepository.deleteEvent(event.id);
+                    setState(() {
+                      _futureEvents = widget.eventRepository
+                          .getEventsForDivision(widget.division.id);
+                    });
+                    if (!mounted) return;
+                    // ignore: use_build_context_synchronously
+                    ScaffoldMessenger.of(context).showSnackBar(
+                      SnackBar(
+                        content: Text('"$name" has been deleted'),
+                      ),
+                    );
+                  }
+                },
+                background: Container(
+                  color: Colors.red,
+                  alignment: Alignment.centerLeft,
+                  padding: const EdgeInsets.only(left: 20),
+                  child: const Icon(
+                    Icons.delete,
+                    color: Colors.white,
+                    size: 32,
+                  ),
+                ),
+                secondaryBackground: Container(
+                  color: Colors.blue,
+                  alignment: Alignment.centerRight,
+                  padding: const EdgeInsets.only(right: 20),
+                  child: const Icon(
+                    Icons.edit,
+                    color: Colors.white,
+                    size: 32,
+                  ),
+                ),
+                child: ListTile(
+                  leading: Text(
+                    flag,
+                    style: const TextStyle(fontSize: 24),
+                  ),
+                  title: Text(name),
+                  trailing: Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      if (_areResultsComplete(event.id))
+                        Container(
+                          padding: const EdgeInsets.symmetric(
+                            horizontal: 8,
+                            vertical: 4,
+                          ),
+                          decoration: BoxDecoration(
+                            color: Colors.green.withOpacity(0.2),
+                            borderRadius: BorderRadius.circular(12),
+                            border: Border.all(
+                              color: Colors.green,
+                              width: 1,
+                            ),
+                          ),
+                          child: const Row(
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              Icon(
+                                Icons.check_circle,
+                                color: Colors.green,
+                                size: 16,
+                              ),
+                              SizedBox(width: 4),
+                              Text(
+                                'Complete',
+                                style: TextStyle(
+                                  color: Colors.green,
+                                  fontSize: 12,
+                                  fontWeight: FontWeight.bold,
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                      const SizedBox(width: 8),
+                      const Icon(Icons.chevron_right),
+                    ],
+                  ),
+                  onTap: () {
+                    // Navigate to results view if complete, otherwise to input screen
+                    if (_areResultsComplete(event.id)) {
+                      Navigator.of(context).push(
+                        MaterialPageRoute(
+                          builder: (_) => SessionResultsViewPage(
+                            event: event,
+                            driverRepository: widget.driverRepository,
+                            sessionResultRepository:
+                                widget.sessionResultRepository,
+                          ),
+                        ),
+                      );
+                    } else {
+                      Navigator.of(context).push(
+                        MaterialPageRoute(
+                          builder: (_) => SessionPage(
+                            event: event,
+                            driverRepository: widget.driverRepository,
+                            sessionResultRepository:
+                                widget.sessionResultRepository,
+                            validationIssueRepository:
+                                widget.validationIssueRepository,
+                            penaltyRepository: widget.penaltyRepository,
+                          ),
+                        ),
+                      );
+                    }
                   },
                   onLongPress: () {
                     _showSetDateTimeDialog(event);
