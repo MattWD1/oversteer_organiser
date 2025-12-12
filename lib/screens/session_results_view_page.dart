@@ -325,94 +325,108 @@ class _SessionResultsViewPageState extends State<SessionResultsViewPage> {
                       final driver = _getDriver(result.driverId);
                       final position = result.finishPosition ?? (index + 1);
 
+                      // Check if driver has a status (DNF/DSQ/DNS)
+                      final hasStatus = result.status != null;
+
                       // Color for driver number based on position
                       Color numberColor = Colors.white;
-                      if (position == 1) numberColor = Colors.amber;
-                      else if (position == 2) numberColor = Colors.grey.shade400;
-                      else if (position == 3) numberColor = Colors.orange.shade800;
+                      Color nameColor = Colors.white;
+                      Color gridColor = Colors.white70;
+                      Color? backgroundColor;
+
+                      if (!hasStatus) {
+                        if (position == 1) {
+                          numberColor = Colors.amber;
+                        } else if (position == 2) {
+                          numberColor = Colors.grey.shade400;
+                        } else if (position == 3) {
+                          numberColor = Colors.orange.shade800;
+                        }
+                      } else {
+                        // DNF/DSQ/DNS styling - red-tinted colors
+                        numberColor = Colors.red.shade400;
+                        nameColor = Colors.red.shade300;
+                        gridColor = Colors.red.shade400;
+                        backgroundColor = Colors.red.shade900.withValues(alpha: 0.2);
+                      }
 
                       return Container(
-                        padding: const EdgeInsets.symmetric(vertical: 12, horizontal: 12),
-                        decoration: BoxDecoration(
-                          border: Border(
-                            bottom: BorderSide(
-                              color: Colors.white10,
-                              width: 1,
+                          padding: const EdgeInsets.symmetric(vertical: 12, horizontal: 12),
+                          decoration: BoxDecoration(
+                            color: backgroundColor,
+                            border: Border(
+                              bottom: BorderSide(
+                                color: Colors.white10,
+                                width: 1,
+                              ),
                             ),
                           ),
-                        ),
-                        child: Row(
-                          children: [
-                            // Position
-                            SizedBox(
-                              width: 40,
-                              child: Text(
-                                '$position',
-                                style: TextStyle(
-                                  color: numberColor,
-                                  fontSize: 18,
-                                  fontWeight: FontWeight.w900,
+                          child: Row(
+                            children: [
+                              // Position
+                              SizedBox(
+                                width: 40,
+                                child: Text(
+                                  hasStatus ? result.status! : '$position',
+                                  style: TextStyle(
+                                    color: numberColor,
+                                    fontSize: 18,
+                                    fontWeight: FontWeight.w900,
+                                  ),
                                 ),
                               ),
-                            ),
-                            // Driver number and name
-                            Expanded(
-                              child: Row(
-                                children: [
-                                  // Driver number with color
-                                  Container(
-                                    padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
-                                    decoration: BoxDecoration(
-                                      color: numberColor.withOpacity(0.2),
-                                      borderRadius: BorderRadius.circular(4),
-                                      border: Border.all(color: numberColor, width: 1),
-                                    ),
-                                    child: Text(
-                                      driver?.number?.toString() ?? '--',
-                                      style: TextStyle(
-                                        color: numberColor,
-                                        fontSize: 12,
-                                        fontWeight: FontWeight.bold,
+                              // Driver number and name
+                              Expanded(
+                                child: Row(
+                                  children: [
+                                    // Driver number with color
+                                    Container(
+                                      padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                                      decoration: BoxDecoration(
+                                        color: numberColor.withValues(alpha: 0.2),
+                                        borderRadius: BorderRadius.circular(4),
+                                        border: Border.all(color: numberColor, width: 1),
+                                      ),
+                                      child: Text(
+                                        driver?.number?.toString() ?? '--',
+                                        style: TextStyle(
+                                          color: numberColor,
+                                          fontSize: 12,
+                                          fontWeight: FontWeight.bold,
+                                        ),
                                       ),
                                     ),
-                                  ),
-                                  const SizedBox(width: 8),
-                                  // Country flag (placeholder - you can add flag emojis later)
-                                  Text(
-                                    '🏁', // Placeholder flag
-                                    style: const TextStyle(fontSize: 16),
-                                  ),
-                                  const SizedBox(width: 8),
-                                  // Driver name
-                                  Expanded(
-                                    child: Text(
-                                      driver?.name ?? 'Unknown',
-                                      style: const TextStyle(
-                                        color: Colors.white,
-                                        fontSize: 14,
-                                        fontWeight: FontWeight.w600,
+                                    const SizedBox(width: 8),
+                                    // Driver name
+                                    Expanded(
+                                      child: Text(
+                                        driver?.name ?? 'Unknown',
+                                        style: TextStyle(
+                                          color: nameColor,
+                                          fontSize: 14,
+                                          fontWeight: FontWeight.w600,
+                                        ),
+                                        overflow: TextOverflow.ellipsis,
                                       ),
-                                      overflow: TextOverflow.ellipsis,
                                     ),
-                                  ),
-                                ],
-                              ),
-                            ),
-                            // Grid position
-                            SizedBox(
-                              width: 60,
-                              child: Text(
-                                result.gridPosition?.toString() ?? '--',
-                                textAlign: TextAlign.center,
-                                style: const TextStyle(
-                                  color: Colors.white70,
-                                  fontSize: 14,
-                                  fontWeight: FontWeight.w600,
+                                  ],
                                 ),
                               ),
-                            ),
-                          ],
-                        ),
+                              // Grid position
+                              SizedBox(
+                                width: 60,
+                                child: Text(
+                                  result.gridPosition?.toString() ?? '--',
+                                  textAlign: TextAlign.center,
+                                  style: TextStyle(
+                                    color: gridColor,
+                                    fontSize: 14,
+                                    fontWeight: FontWeight.w600,
+                                  ),
+                                ),
+                              ),
+                            ],
+                          ),
                       );
                     },
                   ),
@@ -424,7 +438,7 @@ class _SessionResultsViewPageState extends State<SessionResultsViewPage> {
                   color: Colors.black,
                   boxShadow: [
                     BoxShadow(
-                      color: Colors.black.withOpacity(0.3),
+                      color: Colors.black.withValues(alpha: 0.3),
                       blurRadius: 10,
                       offset: const Offset(0, -2),
                     ),
@@ -489,12 +503,12 @@ class _SessionResultsViewPageState extends State<SessionResultsViewPage> {
                           decoration: BoxDecoration(
                             gradient: _selectedTab == 1
                                 ? LinearGradient(
-                                    colors: [Colors.red.shade700, Colors.red.shade900],
+                                    colors: [widget.league.themeColor.withValues(alpha: 0.85), widget.league.themeColor.withValues(alpha: 0.4)],
                                   )
                                 : null,
                             border: Border(
                               top: BorderSide(
-                                color: _selectedTab == 1 ? Colors.red.shade600 : Colors.transparent,
+                                color: _selectedTab == 1 ? widget.league.themeColor.withValues(alpha: 0.9) : Colors.transparent,
                                 width: 3,
                               ),
                             ),

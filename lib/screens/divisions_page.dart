@@ -746,7 +746,9 @@ class _DivisionsPageState extends State<DivisionsPage> {
           ? FloatingActionButton(
               onPressed: _showCreateDivisionDialog,
               tooltip: 'Add division',
-              backgroundColor: widget.league.themeColor,
+              backgroundColor: HSLColor.fromColor(widget.league.themeColor)
+                  .withLightness(0.65)
+                  .toColor(),
               child: const Icon(Icons.add),
             )
           : null,

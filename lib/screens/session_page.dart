@@ -108,6 +108,77 @@ class _TimeInputFormatter extends TextInputFormatter {
   }
 }
 
+// Formatter for gap times (2nd place onwards): +MM:SS.mmm format
+class _GapTimeInputFormatter extends TextInputFormatter {
+  @override
+  TextEditingValue formatEditUpdate(
+    TextEditingValue oldValue,
+    TextEditingValue newValue,
+  ) {
+    // Strip all non-digit characters
+    String digitsOnly = newValue.text.replaceAll(RegExp(r'[^0-9]'), '');
+
+    // Limit to 7 digits max (MM:SS.mmm = 2+2+3)
+    if (digitsOnly.length > 7) {
+      digitsOnly = digitsOnly.substring(0, 7);
+    }
+
+    // Auto-format as user types with + prefix
+    String formatted = '';
+
+    if (digitsOnly.isEmpty) {
+      return TextEditingValue(
+        text: '',
+        selection: const TextSelection.collapsed(offset: 0),
+      );
+    }
+
+    // Format based on number of digits entered
+    if (digitsOnly.length == 1) {
+      // Just first minute digit: "+2"
+      formatted = '+$digitsOnly';
+    } else if (digitsOnly.length == 2) {
+      // Minutes: "+25"
+      formatted = '+${digitsOnly.substring(0, 2)}';
+    } else if (digitsOnly.length == 3) {
+      // Minutes and first second digit: "+25:4"
+      formatted = '+${digitsOnly.substring(0, 2)}:${digitsOnly[2]}';
+    } else if (digitsOnly.length == 4) {
+      // Minutes and seconds: "+25:44"
+      formatted = '+${digitsOnly.substring(0, 2)}:${digitsOnly.substring(2, 4)}';
+    } else if (digitsOnly.length == 5) {
+      // Add first millisecond: "+25:44.3"
+      formatted = '+${digitsOnly.substring(0, 2)}:${digitsOnly.substring(2, 4)}.${digitsOnly[4]}';
+    } else if (digitsOnly.length == 6) {
+      // Add second millisecond: "+25:44.38"
+      formatted = '+${digitsOnly.substring(0, 2)}:${digitsOnly.substring(2, 4)}.${digitsOnly.substring(4, 6)}';
+    } else if (digitsOnly.length == 7) {
+      // Complete format: "+25:44.389"
+      formatted = '+${digitsOnly.substring(0, 2)}:${digitsOnly.substring(2, 4)}.${digitsOnly.substring(4, 7)}';
+    }
+
+    // Validate minutes and seconds don't exceed 59
+    if (digitsOnly.length >= 2) {
+      final minutes = int.parse(digitsOnly.substring(0, 2));
+      if (minutes > 59) {
+        return oldValue; // Reject invalid minutes
+      }
+    }
+
+    if (digitsOnly.length >= 4) {
+      final seconds = int.parse(digitsOnly.substring(2, 4));
+      if (seconds > 59) {
+        return oldValue; // Reject invalid seconds
+      }
+    }
+
+    return TextEditingValue(
+      text: formatted,
+      selection: TextSelection.collapsed(offset: formatted.length),
+    );
+  }
+}
+
 class _ResultEntry {
   String? driverId; // null means empty slot
   String? teamName;
@@ -302,6 +373,7 @@ class _SessionPageState extends State<SessionPage> {
           gridPosition: entry.gridPosition,
           finishPosition: hasStatus ? null : finishPosition,
           raceTimeMillis: entry.raceTimeMillis,
+          status: entry.status,
           hasFastestLap: false,
           fastestLapMillis: null,
           poleLapMillis: null,
@@ -526,6 +598,63 @@ class _SessionPageState extends State<SessionPage> {
     }
   }
 
+  String _formatGapTime(int gapMs) {
+    final duration = Duration(milliseconds: gapMs);
+    final minutes = duration.inMinutes;
+    final seconds = duration.inSeconds % 60;
+    final millis = duration.inMilliseconds % 1000;
+
+    // Format: +MM:SS.mmm
+    return '+${minutes.toString().padLeft(2, '0')}:'
+        '${seconds.toString().padLeft(2, '0')}.'
+        '${millis.toString().padLeft(3, '0')}';
+  }
+
+  void _addDriverEntry() {
+    setState(() {
+      _resultEntries.add(_ResultEntry(
+        driverId: null,
+        teamName: null,
+        gridPosition: _resultEntries.length + 1,
+        status: null,
+        raceTimeMillis: null,
+      ));
+    });
+  }
+
+  void _removeDriverEntry() {
+    if (_resultEntries.isNotEmpty) {
+      setState(() {
+        _resultEntries.removeLast();
+      });
+    }
+  }
+
+  void _calculateResults() {
+    setState(() {
+      // Separate drivers with times from those without
+      final driversWithTimes = _resultEntries.where((e) => e.raceTimeMillis != null && e.status == null).toList();
+      final driversWithStatus = _resultEntries.where((e) => e.status != null).toList();
+      final driversWithoutTimes = _resultEntries.where((e) => e.raceTimeMillis == null && e.status == null).toList();
+
+      // Sort drivers with times by race time (ascending)
+      driversWithTimes.sort((a, b) => a.raceTimeMillis!.compareTo(b.raceTimeMillis!));
+
+      // Rebuild the list: drivers with times first, then DNF/DNS/DSQ, then unfinished
+      _resultEntries.clear();
+      _resultEntries.addAll(driversWithTimes);
+      _resultEntries.addAll(driversWithStatus);
+      _resultEntries.addAll(driversWithoutTimes);
+    });
+
+    ScaffoldMessenger.of(context).showSnackBar(
+      const SnackBar(
+        content: Text('Results calculated and reordered by race time'),
+        duration: Duration(seconds: 2),
+      ),
+    );
+  }
+
   @override
   void dispose() {
     _poleLapTimeController.dispose();
@@ -693,10 +822,82 @@ class _SessionPageState extends State<SessionPage> {
                 return _buildResultRow(entryIndex, entry);
               },
             ),
+            const SizedBox(height: 80), // Space for bottom bar
           ],
         ),
       ),
     ),
+          ),
+          // Bottom bar with calculate, add/remove buttons
+          Container(
+            decoration: BoxDecoration(
+              color: const Color(0xFF2A2A2A),
+              boxShadow: [
+                BoxShadow(
+                  color: Colors.black.withValues(alpha: 0.5),
+                  blurRadius: 10,
+                  offset: const Offset(0, -2),
+                ),
+              ],
+              border: Border(
+                top: BorderSide(
+                  color: widget.league.themeColor.withValues(alpha: 0.5),
+                  width: 2,
+                ),
+              ),
+            ),
+            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+            child: Row(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              children: [
+                // Calculate button (left side)
+                ElevatedButton.icon(
+                  onPressed: _calculateResults,
+                  icon: const Icon(Icons.calculate, size: 20),
+                  label: const Text('Calculate'),
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: widget.league.themeColor,
+                    foregroundColor: Colors.white,
+                    padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+                  ),
+                ),
+                // Add/Remove buttons (right side)
+                Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    // Remove button
+                    IconButton(
+                      onPressed: _resultEntries.isEmpty ? null : _removeDriverEntry,
+                      icon: const Icon(Icons.remove, size: 24),
+                      style: IconButton.styleFrom(
+                        backgroundColor: _resultEntries.isEmpty
+                            ? Colors.grey.shade800
+                            : widget.league.themeColor,
+                        foregroundColor: _resultEntries.isEmpty
+                            ? Colors.grey.shade600
+                            : Colors.white,
+                        disabledBackgroundColor: Colors.grey.shade800,
+                        disabledForegroundColor: Colors.grey.shade600,
+                        padding: const EdgeInsets.all(12),
+                      ),
+                      tooltip: 'Remove Driver',
+                    ),
+                    const SizedBox(width: 12),
+                    // Add button
+                    IconButton(
+                      onPressed: _addDriverEntry,
+                      icon: const Icon(Icons.add, size: 24),
+                      style: IconButton.styleFrom(
+                        backgroundColor: widget.league.themeColor,
+                        foregroundColor: Colors.white,
+                        padding: const EdgeInsets.all(12),
+                      ),
+                      tooltip: 'Add Driver',
+                    ),
+                  ],
+                ),
+              ],
+            ),
           ),
         ],
       ),
@@ -766,6 +967,20 @@ class _SessionPageState extends State<SessionPage> {
       decoration: BoxDecoration(
         color: const Color(0xFF2A2A2A),
         borderRadius: BorderRadius.circular(8),
+        border: Border(
+          bottom: BorderSide(
+            color: widget.league.themeColor,
+            width: 3,
+          ),
+        ),
+        boxShadow: [
+          BoxShadow(
+            color: widget.league.themeColor.withValues(alpha: 0.6),
+            blurRadius: 12,
+            spreadRadius: 2,
+            offset: const Offset(0, 3),
+          ),
+        ],
       ),
       child: IntrinsicHeight(
         child: Row(
@@ -981,9 +1196,14 @@ class _SessionPageState extends State<SessionPage> {
                             child: TextFormField(
                               key: ValueKey('time_${entry.driverId}_$index'),
                               initialValue: entry.raceTimeMillis != null
-                                  ? _formatAbsoluteTime(entry.raceTimeMillis!)
+                                  ? (index == 0
+                                      ? _formatAbsoluteTime(entry.raceTimeMillis!)
+                                      : (_resultEntries.isNotEmpty && _resultEntries[0].raceTimeMillis != null
+                                          ? _formatGapTime(entry.raceTimeMillis! - _resultEntries[0].raceTimeMillis!)
+                                          : _formatAbsoluteTime(entry.raceTimeMillis!)))
                                   : '',
                               enabled: entry.status == null,
+                              keyboardType: TextInputType.number,
                               style: const TextStyle(
                                 color: Colors.white,
                                 fontSize: 14,
@@ -992,12 +1212,12 @@ class _SessionPageState extends State<SessionPage> {
                                 letterSpacing: 1.2,
                               ),
                               decoration: InputDecoration(
-                                labelText: 'Time (H:MM:SS.mmm)',
+                                labelText: index == 0 ? 'Time (H:MM:SS.mmm)' : 'Gap (+MM:SS.mmm)',
                                 labelStyle: TextStyle(
                                   color: entry.status == null ? widget.league.themeColor.withValues(alpha: 0.7) : Colors.grey.shade600,
                                   fontSize: 12,
                                 ),
-                                hintText: 'e.g., 1:24:35.123',
+                                hintText: index == 0 ? 'e.g., 1:24:35.123' : 'e.g., +25:44.389',
                                 hintStyle: TextStyle(color: Colors.grey.shade700, fontSize: 11),
                                 contentPadding: const EdgeInsets.symmetric(horizontal: 8, vertical: 6),
                                 filled: true,
@@ -1019,10 +1239,23 @@ class _SessionPageState extends State<SessionPage> {
                                 ),
                                 isDense: true,
                               ),
-                              inputFormatters: [_TimeInputFormatter()],
+                              inputFormatters: [
+                                index == 0 ? _TimeInputFormatter() : _GapTimeInputFormatter()
+                              ],
                               onChanged: (value) {
                                 setState(() {
-                                  entry.raceTimeMillis = _parseRaceTimeMillis(value);
+                                  if (index == 0) {
+                                    // 1st place: Parse absolute time directly
+                                    entry.raceTimeMillis = _parseRaceTimeMillis(value);
+                                  } else {
+                                    // 2nd place onwards: Parse gap time and add to leader's time
+                                    final gapMs = _parseRaceTimeMillis(value);
+                                    if (gapMs != null && _resultEntries.isNotEmpty && _resultEntries[0].raceTimeMillis != null) {
+                                      entry.raceTimeMillis = _resultEntries[0].raceTimeMillis! + gapMs;
+                                    } else {
+                                      entry.raceTimeMillis = gapMs;
+                                    }
+                                  }
                                 });
                               },
                             ),
@@ -1095,6 +1328,7 @@ class _SessionPageState extends State<SessionPage> {
               Expanded(
                 child: TextField(
                   controller: _poleLapTimeController,
+                  keyboardType: TextInputType.number,
                   style: const TextStyle(
                     color: Colors.white,
                     fontSize: 14,
@@ -1136,6 +1370,7 @@ class _SessionPageState extends State<SessionPage> {
               Expanded(
                 child: TextField(
                   controller: _fastestLapTimeController,
+                  keyboardType: TextInputType.number,
                   style: const TextStyle(
                     color: Colors.white,
                     fontSize: 14,

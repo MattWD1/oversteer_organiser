@@ -521,6 +521,24 @@ class _EventsPageState extends State<EventsPage> {
     return results.any((result) => result.finishPosition != null);
   }
 
+  String? _formatEventDateTime(Event event) {
+    // If both start and end times are set, show full time range
+    if (event.startTime != null && event.endTime != null) {
+      final dateStr = '${event.date.day.toString().padLeft(2, '0')}/${event.date.month.toString().padLeft(2, '0')}';
+      final startTimeStr = '${event.startTime!.hour.toString().padLeft(2, '0')}:${event.startTime!.minute.toString().padLeft(2, '0')}';
+      final endTimeStr = '${event.endTime!.hour.toString().padLeft(2, '0')}:${event.endTime!.minute.toString().padLeft(2, '0')}';
+      return '$dateStr $startTimeStr - $endTimeStr';
+    }
+    // If only start time is set, show date and start time
+    else if (event.startTime != null) {
+      final dateStr = '${event.date.day.toString().padLeft(2, '0')}/${event.date.month.toString().padLeft(2, '0')}';
+      final startTimeStr = '${event.startTime!.hour.toString().padLeft(2, '0')}:${event.startTime!.minute.toString().padLeft(2, '0')}';
+      return '$dateStr $startTimeStr';
+    }
+    // Otherwise, return null (no time set)
+    return null;
+  }
+
   // ---------- Rankings + division data loaders ----------
 
   String _teamLabelForDriver(Driver? driver) {
@@ -1283,41 +1301,38 @@ class _EventsPageState extends State<EventsPage> {
                     style: const TextStyle(fontSize: 24),
                   ),
                   title: Text(name),
+                  subtitle: _formatEventDateTime(event) != null
+                      ? Padding(
+                          padding: const EdgeInsets.only(left: 4, top: 4),
+                          child: Text(
+                            _formatEventDateTime(event)!,
+                            style: TextStyle(
+                              fontSize: 12,
+                              color: Colors.grey.shade600,
+                              fontWeight: FontWeight.w500,
+                            ),
+                          ),
+                        )
+                      : null,
                   trailing: Row(
                     mainAxisSize: MainAxisSize.min,
                     children: [
                       if (_areResultsComplete(event.id))
                         Container(
-                          padding: const EdgeInsets.symmetric(
-                            horizontal: 8,
-                            vertical: 4,
-                          ),
+                          width: 24,
+                          height: 24,
                           decoration: BoxDecoration(
-                            color: Colors.green.withOpacity(0.2),
-                            borderRadius: BorderRadius.circular(12),
+                            color: Colors.green.withValues(alpha: 0.2),
+                            shape: BoxShape.circle,
                             border: Border.all(
                               color: Colors.green,
-                              width: 1,
+                              width: 1.5,
                             ),
                           ),
-                          child: const Row(
-                            mainAxisSize: MainAxisSize.min,
-                            children: [
-                              Icon(
-                                Icons.check_circle,
-                                color: Colors.green,
-                                size: 16,
-                              ),
-                              SizedBox(width: 4),
-                              Text(
-                                'Complete',
-                                style: TextStyle(
-                                  color: Colors.green,
-                                  fontSize: 12,
-                                  fontWeight: FontWeight.bold,
-                                ),
-                              ),
-                            ],
+                          child: const Icon(
+                            Icons.check,
+                            color: Colors.green,
+                            size: 16,
                           ),
                         ),
                       const SizedBox(width: 8),
@@ -1706,7 +1721,9 @@ class _EventsPageState extends State<EventsPage> {
             ? FloatingActionButton(
                 onPressed: _showAddEventSheet,
                 tooltip: 'Add event',
-                backgroundColor: widget.league.themeColor,
+                backgroundColor: HSLColor.fromColor(widget.league.themeColor)
+                    .withLightness(0.65)
+                    .toColor(),
                 child: const Icon(Icons.add),
               )
             : null,

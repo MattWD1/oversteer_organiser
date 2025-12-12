@@ -7,6 +7,9 @@ class SessionResult {
   int? finishPosition;
   int? raceTimeMillis;
 
+  /// Status of the driver (null = finished normally, or 'DNF', 'DNS', 'DSQ')
+  String? status;
+
   /// True if this driver set the fastest lap in the event.
   bool hasFastestLap;
 
@@ -22,6 +25,7 @@ class SessionResult {
     this.gridPosition,
     this.finishPosition,
     this.raceTimeMillis,
+    this.status,
     this.hasFastestLap = false,
     this.fastestLapMillis,
     this.poleLapMillis,
@@ -31,6 +35,7 @@ class SessionResult {
     int? gridPosition,
     int? finishPosition,
     int? raceTimeMillis,
+    String? status,
     bool? hasFastestLap,
     int? fastestLapMillis,
     int? poleLapMillis,
@@ -40,6 +45,7 @@ class SessionResult {
       gridPosition: gridPosition ?? this.gridPosition,
       finishPosition: finishPosition ?? this.finishPosition,
       raceTimeMillis: raceTimeMillis ?? this.raceTimeMillis,
+      status: status ?? this.status,
       hasFastestLap: hasFastestLap ?? this.hasFastestLap,
       fastestLapMillis: fastestLapMillis ?? this.fastestLapMillis,
       poleLapMillis: poleLapMillis ?? this.poleLapMillis,
