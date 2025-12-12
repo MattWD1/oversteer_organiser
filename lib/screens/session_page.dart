@@ -3,16 +3,18 @@ import 'package:flutter/services.dart';
 
 import '../models/event.dart';
 import '../models/driver.dart';
+import '../models/league.dart';
 import '../models/session_result.dart';
 import '../models/validation_issue.dart';
 import '../repositories/driver_repository.dart';
 import '../repositories/session_result_repository.dart';
 import '../repositories/validation_issue_repository.dart';
 import '../repositories/penalty_repository.dart';
+import '../theme/app_theme.dart';
 import 'validation_issues_page.dart';
-import 'session_results_view_page.dart';
 
 class SessionPage extends StatefulWidget {
+  final League league;
   final Event event;
   final DriverRepository driverRepository;
   final SessionResultRepository sessionResultRepository;
@@ -21,6 +23,7 @@ class SessionPage extends StatefulWidget {
 
   const SessionPage({
     super.key,
+    required this.league,
     required this.event,
     required this.driverRepository,
     required this.sessionResultRepository,
@@ -533,23 +536,29 @@ class _SessionPageState extends State<SessionPage> {
   @override
   Widget build(BuildContext context) {
     if (_isLoading) {
-      return Scaffold(
-        appBar: AppBar(
-          title: Text(widget.event.name),
-        ),
-        body: const Center(
-          child: CircularProgressIndicator(),
+      return AppTheme(
+        primaryColor: widget.league.themeColor,
+        child: Scaffold(
+          appBar: AppBar(
+            title: Text(widget.event.name),
+          ),
+          body: const Center(
+            child: CircularProgressIndicator(),
+          ),
         ),
       );
     }
 
     if (_loadError != null) {
-      return Scaffold(
-        appBar: AppBar(
-          title: Text(widget.event.name),
-        ),
-        body: Center(
-          child: Text(_loadError!),
+      return AppTheme(
+        primaryColor: widget.league.themeColor,
+        child: Scaffold(
+          appBar: AppBar(
+            title: Text(widget.event.name),
+          ),
+          body: Center(
+            child: Text(_loadError!),
+          ),
         ),
       );
     }
@@ -557,8 +566,10 @@ class _SessionPageState extends State<SessionPage> {
     final issues =
         widget.validationIssueRepository.getIssuesForEvent(widget.event.id);
 
-    return Scaffold(
-      body: Container(
+    return AppTheme(
+      primaryColor: widget.league.themeColor,
+      child: Scaffold(
+        body: Container(
         decoration: BoxDecoration(
           gradient: LinearGradient(
             begin: Alignment.topCenter,
@@ -566,7 +577,7 @@ class _SessionPageState extends State<SessionPage> {
             colors: [
               Colors.black,
               Colors.grey.shade900,
-              Colors.red.shade900,
+              widget.league.themeColor.withValues(alpha: 0.4),
             ],
             stops: const [0.0, 0.7, 1.0],
           ),
@@ -596,6 +607,7 @@ class _SessionPageState extends State<SessionPage> {
               Navigator.of(context).push(
                 MaterialPageRoute(
                   builder: (_) => ValidationIssuesPage(
+                    league: widget.league,
                     event: widget.event,
                     validationIssueRepository:
                         widget.validationIssueRepository,
@@ -614,29 +626,14 @@ class _SessionPageState extends State<SessionPage> {
                     child: Container(
                       width: 8,
                       height: 8,
-                      decoration: const BoxDecoration(
-                        color: Colors.red,
+                      decoration: BoxDecoration(
+                        color: widget.league.themeColor,
                         shape: BoxShape.circle,
                       ),
                     ),
                   ),
               ],
             ),
-          ),
-          IconButton(
-            tooltip: 'View results',
-            onPressed: () {
-              Navigator.of(context).push(
-                MaterialPageRoute(
-                  builder: (_) => SessionResultsViewPage(
-                    event: widget.event,
-                    driverRepository: widget.driverRepository,
-                    sessionResultRepository: widget.sessionResultRepository,
-                  ),
-                ),
-              );
-            },
-            icon: const Icon(Icons.visibility),
           ),
           IconButton(
             tooltip: 'Save results',
@@ -646,10 +643,10 @@ class _SessionPageState extends State<SessionPage> {
         ],
       ),
           if (_isSaving)
-            const LinearProgressIndicator(
+            LinearProgressIndicator(
               minHeight: 2,
               backgroundColor: Colors.transparent,
-              valueColor: AlwaysStoppedAnimation<Color>(Colors.red),
+              valueColor: AlwaysStoppedAnimation<Color>(widget.league.themeColor),
             ),
           Expanded(
             child: ScrollConfiguration(
@@ -704,6 +701,7 @@ class _SessionPageState extends State<SessionPage> {
         ],
       ),
         ),
+      ),
     );
   }
 
@@ -904,7 +902,7 @@ class _SessionPageState extends State<SessionPage> {
                                   }
                                 });
                               },
-                              activeColor: Colors.red,
+                              activeColor: widget.league.themeColor,
                             ),
                             if (entry.status != null)
                               SizedBox(
@@ -996,7 +994,7 @@ class _SessionPageState extends State<SessionPage> {
                               decoration: InputDecoration(
                                 labelText: 'Time (H:MM:SS.mmm)',
                                 labelStyle: TextStyle(
-                                  color: entry.status == null ? Colors.red.shade400 : Colors.grey.shade600,
+                                  color: entry.status == null ? widget.league.themeColor.withValues(alpha: 0.7) : Colors.grey.shade600,
                                   fontSize: 12,
                                 ),
                                 hintText: 'e.g., 1:24:35.123',
@@ -1013,7 +1011,7 @@ class _SessionPageState extends State<SessionPage> {
                                 ),
                                 focusedBorder: OutlineInputBorder(
                                   borderRadius: BorderRadius.circular(8),
-                                  borderSide: BorderSide(color: Colors.red.shade600, width: 2),
+                                  borderSide: BorderSide(color: widget.league.themeColor.withValues(alpha: 0.9), width: 2),
                                 ),
                                 disabledBorder: OutlineInputBorder(
                                   borderRadius: BorderRadius.circular(8),
@@ -1057,12 +1055,12 @@ class _SessionPageState extends State<SessionPage> {
         ),
         borderRadius: BorderRadius.circular(12),
         border: Border.all(
-          color: Colors.red.shade800,
+          color: widget.league.themeColor.withValues(alpha: 0.6),
           width: 2,
         ),
         boxShadow: [
           BoxShadow(
-            color: Colors.red.withAlpha(76),
+            color: widget.league.themeColor.withValues(alpha: 0.3),
             blurRadius: 20,
             spreadRadius: 2,
           ),
@@ -1075,7 +1073,7 @@ class _SessionPageState extends State<SessionPage> {
             children: [
               Icon(
                 Icons.emoji_events,
-                color: Colors.red.shade600,
+                color: widget.league.themeColor.withValues(alpha: 0.9),
                 size: 24,
               ),
               const SizedBox(width: 12),
@@ -1107,7 +1105,7 @@ class _SessionPageState extends State<SessionPage> {
                   decoration: InputDecoration(
                     labelText: 'POLE LAP TIME',
                     labelStyle: TextStyle(
-                      color: Colors.red.shade400,
+                      color: widget.league.themeColor.withValues(alpha: 0.7),
                       fontSize: 12,
                       fontWeight: FontWeight.w600,
                       letterSpacing: 1,
@@ -1126,7 +1124,7 @@ class _SessionPageState extends State<SessionPage> {
                     ),
                     focusedBorder: OutlineInputBorder(
                       borderRadius: BorderRadius.circular(8),
-                      borderSide: BorderSide(color: Colors.red.shade600, width: 2),
+                      borderSide: BorderSide(color: widget.league.themeColor.withValues(alpha: 0.9), width: 2),
                     ),
                     isDense: true,
                   ),
@@ -1148,7 +1146,7 @@ class _SessionPageState extends State<SessionPage> {
                   decoration: InputDecoration(
                     labelText: 'FASTEST LAP TIME',
                     labelStyle: TextStyle(
-                      color: Colors.red.shade400,
+                      color: widget.league.themeColor.withValues(alpha: 0.7),
                       fontSize: 12,
                       fontWeight: FontWeight.w600,
                       letterSpacing: 1,
@@ -1167,7 +1165,7 @@ class _SessionPageState extends State<SessionPage> {
                     ),
                     focusedBorder: OutlineInputBorder(
                       borderRadius: BorderRadius.circular(8),
-                      borderSide: BorderSide(color: Colors.red.shade600, width: 2),
+                      borderSide: BorderSide(color: widget.league.themeColor.withValues(alpha: 0.9), width: 2),
                     ),
                     isDense: true,
                   ),
@@ -1184,7 +1182,7 @@ class _SessionPageState extends State<SessionPage> {
             decoration: InputDecoration(
               labelText: 'FASTEST LAP DRIVER',
               labelStyle: TextStyle(
-                color: Colors.red.shade400,
+                color: widget.league.themeColor.withValues(alpha: 0.7),
                 fontSize: 12,
                 fontWeight: FontWeight.w600,
                 letterSpacing: 1,
@@ -1201,7 +1199,7 @@ class _SessionPageState extends State<SessionPage> {
               ),
               focusedBorder: OutlineInputBorder(
                 borderRadius: BorderRadius.circular(8),
-                borderSide: BorderSide(color: Colors.red.shade600, width: 2),
+                borderSide: BorderSide(color: widget.league.themeColor.withValues(alpha: 0.9), width: 2),
               ),
               isDense: true,
             ),

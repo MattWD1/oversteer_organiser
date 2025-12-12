@@ -11,6 +11,7 @@ import '../models/driver.dart';
 import '../models/session_result.dart';
 import '../models/penalty.dart';
 
+import '../repositories/league_repository.dart';
 import '../repositories/competition_repository.dart';
 import '../repositories/event_repository.dart';
 import '../repositories/driver_repository.dart';
@@ -18,12 +19,15 @@ import '../repositories/session_result_repository.dart';
 import '../repositories/validation_issue_repository.dart';
 import '../repositories/penalty_repository.dart';
 
+import '../theme/app_theme.dart';
+
 import 'events_page.dart';
 import 'team_profile_page.dart';
 import 'league_settings_page.dart';
 
 class DivisionsPage extends StatefulWidget {
   final League league;
+  final LeagueRepository leagueRepository;
   final CompetitionRepository competitionRepository;
   final EventRepository eventRepository;
   final DriverRepository driverRepository;
@@ -34,6 +38,7 @@ class DivisionsPage extends StatefulWidget {
   const DivisionsPage({
     super.key,
     required this.league,
+    required this.leagueRepository,
     required this.competitionRepository,
     required this.eventRepository,
     required this.driverRepository,
@@ -387,9 +392,9 @@ class _DivisionsPageState extends State<DivisionsPage> {
                         Container(
                           padding: const EdgeInsets.all(12),
                           decoration: BoxDecoration(
-                            color: Colors.red.shade50,
+                            color: widget.league.themeColor.withValues(alpha: 0.1),
                             borderRadius: BorderRadius.circular(8),
-                            border: Border.all(color: Colors.red),
+                            border: Border.all(color: widget.league.themeColor),
                           ),
                           child: Text(
                             code,
@@ -427,15 +432,15 @@ class _DivisionsPageState extends State<DivisionsPage> {
                             Navigator.of(context).pop(true);
                           } else {
                             ScaffoldMessenger.of(context).showSnackBar(
-                              const SnackBar(
-                                content: Text('Incorrect code. Please try again.'),
-                                backgroundColor: Colors.red,
+                              SnackBar(
+                                content: const Text('Incorrect code. Please try again.'),
+                                backgroundColor: widget.league.themeColor,
                               ),
                             );
                           }
                         },
                         style: ElevatedButton.styleFrom(
-                          backgroundColor: Colors.red,
+                          backgroundColor: widget.league.themeColor,
                           foregroundColor: Colors.white,
                         ),
                         child: const Text('Delete'),
@@ -461,7 +466,7 @@ class _DivisionsPageState extends State<DivisionsPage> {
                 );
               },
               background: Container(
-                color: Colors.red,
+                color: widget.league.themeColor,
                 alignment: Alignment.centerLeft,
                 padding: const EdgeInsets.only(left: 20),
                 child: const Icon(
@@ -680,22 +685,32 @@ class _DivisionsPageState extends State<DivisionsPage> {
         break;
     }
 
-    return Scaffold(
+    return AppTheme(
+      primaryColor: widget.league.themeColor,
+      child: Scaffold(
       appBar: AppBar(
         title: Text(widget.league.name),
         actions: [
           IconButton(
             tooltip: 'League Settings',
             icon: const Icon(Icons.settings),
-            onPressed: () {
-              Navigator.of(context).push(
+            onPressed: () async {
+              final navigator = Navigator.of(context);
+              final colorChanged = await navigator.push<bool>(
                 MaterialPageRoute(
                   builder: (_) => LeagueSettingsPage(
                     league: widget.league,
                     competitionRepository: widget.competitionRepository,
+                    leagueRepository: widget.leagueRepository,
                   ),
                 ),
               );
+
+              // If color was changed, pop this page and signal to LeaguesPage
+              // that it needs to refresh the league data
+              if (colorChanged == true && mounted) {
+                navigator.pop(true);
+              }
             },
           ),
           IconButton(
@@ -731,9 +746,11 @@ class _DivisionsPageState extends State<DivisionsPage> {
           ? FloatingActionButton(
               onPressed: _showCreateDivisionDialog,
               tooltip: 'Add division',
+              backgroundColor: widget.league.themeColor,
               child: const Icon(Icons.add),
             )
           : null,
+      ),
     );
   }
 }

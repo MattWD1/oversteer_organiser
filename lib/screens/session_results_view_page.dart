@@ -4,17 +4,21 @@ import 'package:flutter/material.dart';
 
 import '../models/event.dart';
 import '../models/driver.dart';
+import '../models/league.dart';
 import '../models/session_result.dart';
 import '../repositories/driver_repository.dart';
 import '../repositories/session_result_repository.dart';
+import '../theme/app_theme.dart';
 
 class SessionResultsViewPage extends StatefulWidget {
+  final League league;
   final Event event;
   final DriverRepository driverRepository;
   final SessionResultRepository sessionResultRepository;
 
   const SessionResultsViewPage({
     super.key,
+    required this.league,
     required this.event,
     required this.driverRepository,
     required this.sessionResultRepository,
@@ -99,22 +103,25 @@ class _SessionResultsViewPageState extends State<SessionResultsViewPage> {
   @override
   Widget build(BuildContext context) {
     if (_isLoading) {
-      return Scaffold(
-        body: Container(
-          decoration: BoxDecoration(
-            gradient: LinearGradient(
-              begin: Alignment.topCenter,
-              end: Alignment.bottomCenter,
-              colors: [
-                Colors.black,
-                Colors.grey.shade900,
-                Colors.red.shade900,
-              ],
-              stops: const [0.0, 0.7, 1.0],
+      return AppTheme(
+        primaryColor: widget.league.themeColor,
+        child: Scaffold(
+          body: Container(
+            decoration: BoxDecoration(
+              gradient: LinearGradient(
+                begin: Alignment.topCenter,
+                end: Alignment.bottomCenter,
+                colors: [
+                  Colors.black,
+                  Colors.grey.shade900,
+                  widget.league.themeColor.withValues(alpha: 0.4),
+                ],
+                stops: const [0.0, 0.7, 1.0],
+              ),
             ),
-          ),
-          child: const Center(
-            child: CircularProgressIndicator(color: Colors.red),
+            child: Center(
+              child: CircularProgressIndicator(color: widget.league.themeColor),
+            ),
           ),
         ),
       );
@@ -123,7 +130,9 @@ class _SessionResultsViewPageState extends State<SessionResultsViewPage> {
     final fastestLap = _getFastestLapResult();
     final pole = _getPoleResult();
 
-    return Scaffold(
+    return AppTheme(
+      primaryColor: widget.league.themeColor,
+      child: Scaffold(
       body: Container(
         decoration: BoxDecoration(
           gradient: LinearGradient(
@@ -132,7 +141,7 @@ class _SessionResultsViewPageState extends State<SessionResultsViewPage> {
             colors: [
               Colors.black,
               Colors.grey.shade900,
-              Colors.red.shade900,
+              widget.league.themeColor.withValues(alpha: 0.4),
             ],
             stops: const [0.0, 0.7, 1.0],
           ),
@@ -166,10 +175,10 @@ class _SessionResultsViewPageState extends State<SessionResultsViewPage> {
                 width: double.infinity,
                 padding: const EdgeInsets.symmetric(vertical: 12, horizontal: 16),
                 decoration: BoxDecoration(
-                  color: Colors.red.shade900,
+                  color: widget.league.themeColor.withValues(alpha: 0.4),
                   boxShadow: [
                     BoxShadow(
-                      color: Colors.red.withAlpha(102),
+                      color: widget.league.themeColor.withValues(alpha: 0.4),
                       blurRadius: 10,
                       spreadRadius: 1,
                     ),
@@ -205,10 +214,10 @@ class _SessionResultsViewPageState extends State<SessionResultsViewPage> {
                     colors: [Colors.grey.shade900, Colors.black87],
                   ),
                   borderRadius: BorderRadius.circular(12),
-                  border: Border.all(color: Colors.red.shade800, width: 2),
+                  border: Border.all(color: widget.league.themeColor.withValues(alpha: 0.6), width: 2),
                   boxShadow: [
                     BoxShadow(
-                      color: Colors.red.withAlpha(76),
+                      color: widget.league.themeColor.withValues(alpha: 0.3),
                       blurRadius: 20,
                       spreadRadius: 2,
                     ),
@@ -435,12 +444,12 @@ class _SessionResultsViewPageState extends State<SessionResultsViewPage> {
                           decoration: BoxDecoration(
                             gradient: _selectedTab == 0
                                 ? LinearGradient(
-                                    colors: [Colors.red.shade700, Colors.red.shade900],
+                                    colors: [widget.league.themeColor.withValues(alpha: 0.85), widget.league.themeColor.withValues(alpha: 0.4)],
                                   )
                                 : null,
                             border: Border(
                               top: BorderSide(
-                                color: _selectedTab == 0 ? Colors.red.shade600 : Colors.transparent,
+                                color: _selectedTab == 0 ? widget.league.themeColor.withValues(alpha: 0.9) : Colors.transparent,
                                 width: 3,
                               ),
                             ),
@@ -520,6 +529,7 @@ class _SessionResultsViewPageState extends State<SessionResultsViewPage> {
           ),
         ),
       ),
+    ),
     );
   }
 

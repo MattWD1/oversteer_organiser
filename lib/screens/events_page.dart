@@ -25,6 +25,8 @@ import '../repositories/session_result_repository.dart';
 import '../repositories/validation_issue_repository.dart';
 import '../repositories/penalty_repository.dart';
 
+import '../theme/app_theme.dart';
+
 // ---------- F1 25 Tracks + Flags ----------
 
 class _F1TrackOption {
@@ -1143,7 +1145,7 @@ class _EventsPageState extends State<EventsPage> {
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
           content: Text('Failed to add event: $e'),
-          backgroundColor: Colors.red,
+          backgroundColor: widget.league.themeColor,
         ),
       );
     }
@@ -1209,7 +1211,7 @@ class _EventsPageState extends State<EventsPage> {
                           ElevatedButton(
                             onPressed: () => Navigator.of(context).pop(true),
                             style: ElevatedButton.styleFrom(
-                              backgroundColor: Colors.red,
+                              backgroundColor: widget.league.themeColor,
                               foregroundColor: Colors.white,
                             ),
                             child: const Text('Delete'),
@@ -1223,6 +1225,7 @@ class _EventsPageState extends State<EventsPage> {
                     Navigator.of(context).push(
                       MaterialPageRoute(
                         builder: (_) => SessionPage(
+                          league: widget.league,
                           event: event,
                           driverRepository: widget.driverRepository,
                           sessionResultRepository:
@@ -1255,7 +1258,7 @@ class _EventsPageState extends State<EventsPage> {
                   }
                 },
                 background: Container(
-                  color: Colors.red,
+                  color: widget.league.themeColor,
                   alignment: Alignment.centerLeft,
                   padding: const EdgeInsets.only(left: 20),
                   child: const Icon(
@@ -1327,6 +1330,7 @@ class _EventsPageState extends State<EventsPage> {
                       Navigator.of(context).push(
                         MaterialPageRoute(
                           builder: (_) => SessionResultsViewPage(
+                            league: widget.league,
                             event: event,
                             driverRepository: widget.driverRepository,
                             sessionResultRepository:
@@ -1338,6 +1342,7 @@ class _EventsPageState extends State<EventsPage> {
                       Navigator.of(context).push(
                         MaterialPageRoute(
                           builder: (_) => SessionPage(
+                            league: widget.league,
                             event: event,
                             driverRepository: widget.driverRepository,
                             sessionResultRepository:
@@ -1628,80 +1633,84 @@ class _EventsPageState extends State<EventsPage> {
         break;
     }
 
-    return Scaffold(
-      appBar: AppBar(
-        title: Text(widget.division.name),
-        actions: [
-          IconButton(
-            icon: const Icon(Icons.info_outline),
-            onPressed: () {
-              Navigator.of(context).push(
-                MaterialPageRoute(
-                  builder: (_) => DivisionInformationPage(
-                    league: widget.league,
-                    division: widget.division,
-                    eventRepository: widget.eventRepository,
+    return AppTheme(
+      primaryColor: widget.league.themeColor,
+      child: Scaffold(
+        appBar: AppBar(
+          title: Text(widget.division.name),
+          actions: [
+            IconButton(
+              icon: const Icon(Icons.info_outline),
+              onPressed: () {
+                Navigator.of(context).push(
+                  MaterialPageRoute(
+                    builder: (_) => DivisionInformationPage(
+                      league: widget.league,
+                      division: widget.division,
+                      eventRepository: widget.eventRepository,
+                    ),
                   ),
-                ),
-              );
-            },
-            tooltip: 'Division Information',
-          ),
-          IconButton(
-            icon: const Icon(Icons.settings),
-            onPressed: () {
-              Navigator.of(context).push(
-                MaterialPageRoute(
-                  builder: (_) => DivisionSettingsPage(
-                    league: widget.league,
-                    competition: widget.competition,
-                    division: widget.division,
-                    competitionRepository: widget.competitionRepository,
-                    eventRepository: widget.eventRepository,
+                );
+              },
+              tooltip: 'Division Information',
+            ),
+            IconButton(
+              icon: const Icon(Icons.settings),
+              onPressed: () {
+                Navigator.of(context).push(
+                  MaterialPageRoute(
+                    builder: (_) => DivisionSettingsPage(
+                      league: widget.league,
+                      competition: widget.competition,
+                      division: widget.division,
+                      competitionRepository: widget.competitionRepository,
+                      eventRepository: widget.eventRepository,
+                    ),
                   ),
-                ),
-              );
-            },
-            tooltip: 'Division Settings',
-          ),
-        ],
+                );
+              },
+              tooltip: 'Division Settings',
+            ),
+          ],
+        ),
+        body: body,
+        bottomNavigationBar: BottomNavigationBar(
+          currentIndex: _currentEventsTabIndex,
+          selectedItemColor: Colors.amber,
+          unselectedItemColor: Colors.grey,
+          onTap: (index) {
+            setState(() {
+              _currentEventsTabIndex = index;
+            });
+          },
+          items: [
+            const BottomNavigationBarItem(
+              icon: Icon(Icons.flag),
+              label: 'Race',
+            ),
+            const BottomNavigationBarItem(
+              icon: Icon(Icons.groups),
+              label: 'Teams',
+            ),
+            const BottomNavigationBarItem(
+              icon: Icon(Icons.person),
+              label: 'Drivers',
+            ),
+            const BottomNavigationBarItem(
+              icon: Icon(Icons.emoji_events_outlined),
+              label: 'Rankings',
+            ),
+          ],
+        ),
+        floatingActionButton: _currentEventsTabIndex == 0
+            ? FloatingActionButton(
+                onPressed: _showAddEventSheet,
+                tooltip: 'Add event',
+                backgroundColor: widget.league.themeColor,
+                child: const Icon(Icons.add),
+              )
+            : null,
       ),
-      body: body,
-      bottomNavigationBar: BottomNavigationBar(
-        currentIndex: _currentEventsTabIndex,
-        selectedItemColor: Colors.amber,
-        unselectedItemColor: Colors.grey,
-        onTap: (index) {
-          setState(() {
-            _currentEventsTabIndex = index;
-          });
-        },
-        items: [
-          const BottomNavigationBarItem(
-            icon: Icon(Icons.flag),
-            label: 'Race',
-          ),
-          const BottomNavigationBarItem(
-            icon: Icon(Icons.groups),
-            label: 'Teams',
-          ),
-          const BottomNavigationBarItem(
-            icon: Icon(Icons.person),
-            label: 'Drivers',
-          ),
-          const BottomNavigationBarItem(
-            icon: Icon(Icons.emoji_events_outlined),
-            label: 'Rankings',
-          ),
-        ],
-      ),
-      floatingActionButton: _currentEventsTabIndex == 0
-          ? FloatingActionButton(
-              onPressed: _showAddEventSheet,
-              tooltip: 'Add event',
-              child: const Icon(Icons.add),
-            )
-          : null,
     );
   }
 }

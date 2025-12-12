@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 
 import '../models/league.dart';
 import '../models/competition.dart';
+import '../repositories/league_repository.dart';
 import '../repositories/competition_repository.dart';
 import '../repositories/event_repository.dart';
 import '../repositories/driver_repository.dart';
@@ -14,6 +15,7 @@ enum CompetitionSortOption { name, date }
 
 class CompetitionsPage extends StatefulWidget {
   final League league;
+  final LeagueRepository leagueRepository;
   final CompetitionRepository competitionRepository;
   final EventRepository eventRepository;
   final DriverRepository driverRepository;
@@ -24,6 +26,7 @@ class CompetitionsPage extends StatefulWidget {
   const CompetitionsPage({
     super.key,
     required this.league,
+    required this.leagueRepository,
     required this.competitionRepository,
     required this.eventRepository,
     required this.driverRepository,
@@ -145,6 +148,7 @@ class _CompetitionsPageState extends State<CompetitionsPage> {
                           MaterialPageRoute(
                             builder: (_) => DivisionsPage(
                               league: widget.league,
+                              leagueRepository: widget.leagueRepository,
                               competitionRepository:
                                   widget.competitionRepository,
                               eventRepository: widget.eventRepository,

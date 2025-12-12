@@ -9,6 +9,7 @@ import '../models/competition.dart';
 import '../models/division.dart';
 import '../repositories/competition_repository.dart';
 import '../repositories/event_repository.dart';
+import '../theme/app_theme.dart';
 
 class DivisionSettingsPage extends StatefulWidget {
   final League league;
@@ -32,7 +33,7 @@ class DivisionSettingsPage extends StatefulWidget {
 
 class _DivisionSettingsPageState extends State<DivisionSettingsPage> {
   // Competition color
-  Color _selectedColor = Colors.red;
+  late Color _selectedColor;
   final TextEditingController _hexController = TextEditingController();
 
   // Penalty points thresholds
@@ -83,6 +84,7 @@ class _DivisionSettingsPageState extends State<DivisionSettingsPage> {
   @override
   void initState() {
     super.initState();
+    _selectedColor = widget.league.themeColor;
     _hexController.text = _colorToHex(_selectedColor);
   }
 
@@ -176,10 +178,10 @@ class _DivisionSettingsPageState extends State<DivisionSettingsPage> {
       padding: const EdgeInsets.fromLTRB(16, 24, 16, 8),
       child: Text(
         title,
-        style: const TextStyle(
+        style: TextStyle(
           fontSize: 20,
           fontWeight: FontWeight.bold,
-          color: Colors.red,
+          color: widget.league.themeColor,
         ),
       ),
     );
@@ -504,35 +506,38 @@ class _DivisionSettingsPageState extends State<DivisionSettingsPage> {
 
   @override
   Widget build(BuildContext context) {
-    return Scaffold(
-      appBar: AppBar(
-        title: Text('${widget.division.name} Settings'),
-        actions: [
-          IconButton(
-            icon: const Icon(Icons.save),
-            onPressed: () {
-              ScaffoldMessenger.of(context).showSnackBar(
-                const SnackBar(
-                  content: Text('Settings saved successfully'),
-                ),
-              );
-            },
-            tooltip: 'Save Settings',
-          ),
-        ],
-      ),
-      body: SingleChildScrollView(
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            _buildSectionHeader('Settings'),
-            _buildCompetitionInformationSection(),
-            _buildRulesetSection(),
-            _buildPointsSettingsSection(),
-            _buildRankingSettingsSection(),
-            _buildSessionSettingsSection(),
-            const SizedBox(height: 32),
+    return AppTheme(
+      primaryColor: widget.league.themeColor,
+      child: Scaffold(
+        appBar: AppBar(
+          title: Text('${widget.division.name} Settings'),
+          actions: [
+            IconButton(
+              icon: const Icon(Icons.save),
+              onPressed: () {
+                ScaffoldMessenger.of(context).showSnackBar(
+                  const SnackBar(
+                    content: Text('Settings saved successfully'),
+                  ),
+                );
+              },
+              tooltip: 'Save Settings',
+            ),
           ],
+        ),
+        body: SingleChildScrollView(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              _buildSectionHeader('Settings'),
+              _buildCompetitionInformationSection(),
+              _buildRulesetSection(),
+              _buildPointsSettingsSection(),
+              _buildRankingSettingsSection(),
+              _buildSessionSettingsSection(),
+              const SizedBox(height: 32),
+            ],
+          ),
         ),
       ),
     );

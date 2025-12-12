@@ -13,6 +13,9 @@ abstract class LeagueRepository {
 
   /// Permanently delete a league.
   Future<void> deleteLeague(String leagueId);
+
+  /// Update the theme color for a league.
+  Future<void> updateLeagueThemeColor(String leagueId, int colorValue);
 }
 
 class InMemoryLeagueRepository implements LeagueRepository {
@@ -23,6 +26,7 @@ class InMemoryLeagueRepository implements LeagueRepository {
       organiserName: 'Matt',
       createdAt: DateTime(2025, 1, 10),
       joinCode: 'SUNF1A',
+      themeColorValue: 0xFFD32F2F,
     ),
     League(
       id: 'league2',
@@ -30,6 +34,7 @@ class InMemoryLeagueRepository implements LeagueRepository {
       organiserName: 'Alex',
       createdAt: DateTime(2025, 2, 5),
       joinCode: 'MIDSPT',
+      themeColorValue: 0xFFD32F2F,
     ),
   ];
 
@@ -66,6 +71,7 @@ class InMemoryLeagueRepository implements LeagueRepository {
       organiserName: 'You', // placeholder until we plug in real user data
       createdAt: DateTime.now(),
       joinCode: _generateJoinCode(),
+      themeColorValue: 0xFFD32F2F, // Default red color
     );
 
     _allLeagues.add(league);
@@ -100,5 +106,24 @@ class InMemoryLeagueRepository implements LeagueRepository {
     await Future.delayed(const Duration(milliseconds: 100));
     _allLeagues.removeWhere((l) => l.id == leagueId);
     _userLeagueIds.remove(leagueId);
+  }
+
+  @override
+  Future<void> updateLeagueThemeColor(String leagueId, int colorValue) async {
+    await Future.delayed(const Duration(milliseconds: 100));
+
+    final index = _allLeagues.indexWhere((l) => l.id == leagueId);
+    if (index != -1) {
+      final oldLeague = _allLeagues[index];
+      final updatedLeague = League(
+        id: oldLeague.id,
+        name: oldLeague.name,
+        organiserName: oldLeague.organiserName,
+        createdAt: oldLeague.createdAt,
+        joinCode: oldLeague.joinCode,
+        themeColorValue: colorValue,
+      );
+      _allLeagues[index] = updatedLeague;
+    }
   }
 }

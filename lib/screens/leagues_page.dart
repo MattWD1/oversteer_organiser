@@ -451,11 +451,12 @@ class _LeaguesPageState extends State<LeaguesPage> {
                         title: Text(league.name),
                         subtitle: Text('Organiser: ${league.organiserName}'),
                         trailing: const Icon(Icons.chevron_right),
-                        onTap: () {
-                          Navigator.of(context).push(
+                        onTap: () async {
+                          final colorChanged = await Navigator.of(context).push<bool>(
                             MaterialPageRoute(
                               builder: (_) => DivisionsPage(
                                 league: league,
+                                leagueRepository: widget.repository,
                                 competitionRepository:
                                     widget.competitionRepository,
                                 eventRepository: widget.eventRepository,
@@ -468,6 +469,11 @@ class _LeaguesPageState extends State<LeaguesPage> {
                               ),
                             ),
                           );
+
+                          // If color was changed, refresh the leagues to get updated data
+                          if (colorChanged == true) {
+                            await _refreshLeagues();
+                          }
                         },
                       ),
                     );

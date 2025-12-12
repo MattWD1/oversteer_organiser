@@ -8,6 +8,7 @@ import '../models/league.dart';
 import '../models/division.dart';
 import '../models/event.dart';
 import '../repositories/event_repository.dart';
+import '../theme/app_theme.dart';
 
 class DivisionInformationPage extends StatefulWidget {
   final League league;
@@ -60,10 +61,10 @@ class _DivisionInformationPageState extends State<DivisionInformationPage> {
       padding: const EdgeInsets.fromLTRB(16, 24, 16, 8),
       child: Text(
         title,
-        style: const TextStyle(
+        style: TextStyle(
           fontSize: 20,
           fontWeight: FontWeight.bold,
-          color: Colors.red,
+          color: widget.league.themeColor,
         ),
       ),
     );
@@ -161,7 +162,7 @@ class _DivisionInformationPageState extends State<DivisionInformationPage> {
                         child: Container(
                           height: 50,
                           decoration: BoxDecoration(
-                            color: hasEvents ? Colors.red.shade50 : null,
+                            color: hasEvents ? widget.league.themeColor.withValues(alpha: 0.1) : null,
                           ),
                           child: Stack(
                             children: [
@@ -172,7 +173,7 @@ class _DivisionInformationPageState extends State<DivisionInformationPage> {
                                     fontWeight: hasEvents
                                         ? FontWeight.bold
                                         : FontWeight.normal,
-                                    color: hasEvents ? Colors.red : null,
+                                    color: hasEvents ? widget.league.themeColor : null,
                                   ),
                                 ),
                               ),
@@ -185,8 +186,8 @@ class _DivisionInformationPageState extends State<DivisionInformationPage> {
                                     child: Container(
                                       width: 6,
                                       height: 6,
-                                      decoration: const BoxDecoration(
-                                        color: Colors.red,
+                                      decoration: BoxDecoration(
+                                        color: widget.league.themeColor,
                                         shape: BoxShape.circle,
                                       ),
                                     ),
@@ -211,7 +212,7 @@ class _DivisionInformationPageState extends State<DivisionInformationPage> {
             icon: const Icon(Icons.calendar_today),
             label: const Text('Add Events to Calendar'),
             style: ElevatedButton.styleFrom(
-              backgroundColor: Colors.red,
+              backgroundColor: widget.league.themeColor,
               foregroundColor: Colors.white,
               padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 12),
             ),
@@ -308,7 +309,7 @@ class _DivisionInformationPageState extends State<DivisionInformationPage> {
               : 'Failed to add events to calendar',
         ),
         duration: const Duration(seconds: 3),
-        backgroundColor: successCount > 0 ? Colors.green : Colors.red,
+        backgroundColor: successCount > 0 ? Colors.green : widget.league.themeColor,
       ),
     );
   }
@@ -482,55 +483,58 @@ class _DivisionInformationPageState extends State<DivisionInformationPage> {
 
   @override
   Widget build(BuildContext context) {
-    return Scaffold(
-      appBar: AppBar(
-        title: Text('${widget.division.name} Information'),
-      ),
-      body: SingleChildScrollView(
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            _buildSectionHeader('Event Calendar'),
-            FutureBuilder<List<Event>>(
-              future: _futureEvents,
-              builder: (context, snapshot) {
-                if (snapshot.connectionState == ConnectionState.waiting) {
-                  return const Center(
-                    child: Padding(
-                      padding: EdgeInsets.all(32),
-                      child: CircularProgressIndicator(),
-                    ),
-                  );
-                }
+    return AppTheme(
+      primaryColor: widget.league.themeColor,
+      child: Scaffold(
+        appBar: AppBar(
+          title: Text('${widget.division.name} Information'),
+        ),
+        body: SingleChildScrollView(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              _buildSectionHeader('Event Calendar'),
+              FutureBuilder<List<Event>>(
+                future: _futureEvents,
+                builder: (context, snapshot) {
+                  if (snapshot.connectionState == ConnectionState.waiting) {
+                    return const Center(
+                      child: Padding(
+                        padding: EdgeInsets.all(32),
+                        child: CircularProgressIndicator(),
+                      ),
+                    );
+                  }
 
-                if (snapshot.hasError) {
-                  return Center(
-                    child: Padding(
-                      padding: const EdgeInsets.all(16),
-                      child: Text('Error loading events: ${snapshot.error}'),
-                    ),
-                  );
-                }
+                  if (snapshot.hasError) {
+                    return Center(
+                      child: Padding(
+                        padding: const EdgeInsets.all(16),
+                        child: Text('Error loading events: ${snapshot.error}'),
+                      ),
+                    );
+                  }
 
-                final events = snapshot.data ?? [];
-                return _buildCalendar(events);
-              },
-            ),
-            const Divider(height: 32, thickness: 2),
-            _buildSectionHeader('Points Settings (Read-Only)'),
-            const Padding(
-              padding: EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-              child: Text(
-                'These are the current points settings for this division. Contact an admin to modify.',
-                style: TextStyle(color: Colors.grey),
+                  final events = snapshot.data ?? [];
+                  return _buildCalendar(events);
+                },
               ),
-            ),
-            Padding(
-              padding: const EdgeInsets.all(16),
-              child: _buildPointsSettings(),
-            ),
-            const SizedBox(height: 32),
-          ],
+              const Divider(height: 32, thickness: 2),
+              _buildSectionHeader('Points Settings (Read-Only)'),
+              const Padding(
+                padding: EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+                child: Text(
+                  'These are the current points settings for this division. Contact an admin to modify.',
+                  style: TextStyle(color: Colors.grey),
+                ),
+              ),
+              Padding(
+                padding: const EdgeInsets.all(16),
+                child: _buildPointsSettings(),
+              ),
+              const SizedBox(height: 32),
+            ],
+          ),
         ),
       ),
     );

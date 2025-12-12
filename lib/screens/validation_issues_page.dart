@@ -1,15 +1,19 @@
 import 'package:flutter/material.dart';
 
 import '../models/event.dart';
+import '../models/league.dart';
 import '../models/validation_issue.dart';
 import '../repositories/validation_issue_repository.dart';
+import '../theme/app_theme.dart';
 
 class ValidationIssuesPage extends StatelessWidget {
+  final League league;
   final Event event;
   final ValidationIssueRepository validationIssueRepository;
 
   const ValidationIssuesPage({
     super.key,
+    required this.league,
     required this.event,
     required this.validationIssueRepository,
   });
@@ -19,7 +23,9 @@ class ValidationIssuesPage extends StatelessWidget {
     final List<ValidationIssue> issues =
         validationIssueRepository.getIssuesForEvent(event.id);
 
-    return Scaffold(
+    return AppTheme(
+      primaryColor: league.themeColor,
+      child: Scaffold(
       appBar: AppBar(
         title: Text('Validation issues – ${event.name}'),
       ),
@@ -43,7 +49,7 @@ class ValidationIssuesPage extends StatelessWidget {
                     issue.code.toUpperCase().contains('DUPLICATE');
                 final icon =
                     isError ? Icons.error : Icons.warning_amber_outlined;
-                final iconColor = isError ? Colors.red : Colors.orange;
+                final iconColor = isError ? league.themeColor : Colors.orange;
 
                 return Card(
                   child: ListTile(
@@ -62,6 +68,7 @@ class ValidationIssuesPage extends StatelessWidget {
                 );
               },
             ),
+      ),
     );
   }
 }

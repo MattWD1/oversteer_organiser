@@ -6,15 +6,18 @@ import 'package:flutter_colorpicker/flutter_colorpicker.dart';
 
 import '../models/league.dart';
 import '../repositories/competition_repository.dart';
+import '../repositories/league_repository.dart';
 
 class LeagueSettingsPage extends StatefulWidget {
   final League league;
   final CompetitionRepository competitionRepository;
+  final LeagueRepository leagueRepository;
 
   const LeagueSettingsPage({
     super.key,
     required this.league,
     required this.competitionRepository,
+    required this.leagueRepository,
   });
 
   @override
@@ -23,7 +26,7 @@ class LeagueSettingsPage extends StatefulWidget {
 
 class _LeagueSettingsPageState extends State<LeagueSettingsPage> {
   // League color
-  Color _selectedColor = Colors.blue;
+  late Color _selectedColor;
   final TextEditingController _hexController = TextEditingController();
 
   // Generated codes
@@ -33,6 +36,7 @@ class _LeagueSettingsPageState extends State<LeagueSettingsPage> {
   @override
   void initState() {
     super.initState();
+    _selectedColor = widget.league.themeColor;
     _hexController.text = _colorToHex(_selectedColor);
   }
 
@@ -488,12 +492,34 @@ class _LeagueSettingsPageState extends State<LeagueSettingsPage> {
         actions: [
           IconButton(
             icon: const Icon(Icons.save),
-            onPressed: () {
-              ScaffoldMessenger.of(context).showSnackBar(
+            onPressed: () async {
+              final navigator = Navigator.of(context);
+              final messenger = ScaffoldMessenger.of(context);
+
+              // Save the selected color to the league
+              // Convert color to ARGB32 format (0xAARRGGBB) using new color API
+              final a = (_selectedColor.a * 255.0).round().clamp(0, 255);
+              final r = (_selectedColor.r * 255.0).round().clamp(0, 255);
+              final g = (_selectedColor.g * 255.0).round().clamp(0, 255);
+              final b = (_selectedColor.b * 255.0).round().clamp(0, 255);
+              final colorValue = (a << 24) | (r << 16) | (g << 8) | (b << 0);
+
+              await widget.leagueRepository.updateLeagueThemeColor(
+                widget.league.id,
+                colorValue,
+              );
+
+              if (!mounted) return;
+
+              messenger.showSnackBar(
                 const SnackBar(
-                  content: Text('Settings saved successfully'),
+                  content: Text('Color saved! Re-enter the league to see the new theme.'),
+                  duration: Duration(seconds: 3),
                 ),
               );
+
+              // Return true to signal that color was changed
+              navigator.pop(true);
             },
             tooltip: 'Save Settings',
           ),
