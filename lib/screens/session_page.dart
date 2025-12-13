@@ -195,6 +195,18 @@ class _ResultEntry {
   });
 }
 
+class _PenaltyEntry {
+  String? driverId;
+  int? timePenaltySeconds; // Time penalty in seconds (integers only)
+  int? penaltyPoints; // Championship penalty points
+
+  _PenaltyEntry({
+    this.driverId,
+    this.timePenaltySeconds,
+    this.penaltyPoints,
+  });
+}
+
 class _SessionPageState extends State<SessionPage> {
   bool _isLoading = true;
   bool _isSaving = false;
@@ -202,6 +214,8 @@ class _SessionPageState extends State<SessionPage> {
 
   final List<Driver> _allDrivers = [];
   final List<_ResultEntry> _resultEntries = [];
+  final List<_PenaltyEntry> _penaltyEntries = [];
+  bool _isPenaltySectionExpanded = true; // Track penalty section expansion
 
   // Qualifying & fastest lap
   final TextEditingController _poleLapTimeController = TextEditingController();
@@ -637,20 +651,43 @@ class _SessionPageState extends State<SessionPage> {
       final driversWithStatus = _resultEntries.where((e) => e.status != null).toList();
       final driversWithoutTimes = _resultEntries.where((e) => e.raceTimeMillis == null && e.status == null).toList();
 
-      // Sort drivers with times by race time (ascending)
-      driversWithTimes.sort((a, b) => a.raceTimeMillis!.compareTo(b.raceTimeMillis!));
+      // Create a list of drivers with adjusted times (for sorting only - doesn't modify original times)
+      final driversWithAdjustedTimes = driversWithTimes.map((driver) {
+        final penalty = _penaltyEntries.firstWhere(
+          (p) => p.driverId == driver.driverId && p.timePenaltySeconds != null && p.timePenaltySeconds! > 0,
+          orElse: () => _PenaltyEntry(),
+        );
+
+        final adjustedTime = penalty.timePenaltySeconds != null && penalty.timePenaltySeconds! > 0
+            ? driver.raceTimeMillis! + (penalty.timePenaltySeconds! * 1000)
+            : driver.raceTimeMillis!;
+
+        return {'driver': driver, 'adjustedTime': adjustedTime};
+      }).toList();
+
+      // Sort by adjusted time
+      driversWithAdjustedTimes.sort((a, b) =>
+        (a['adjustedTime'] as int).compareTo(b['adjustedTime'] as int)
+      );
+
+      // Extract the sorted drivers
+      final sortedDrivers = driversWithAdjustedTimes.map((e) => e['driver'] as _ResultEntry).toList();
 
       // Rebuild the list: drivers with times first, then DNF/DNS/DSQ, then unfinished
       _resultEntries.clear();
-      _resultEntries.addAll(driversWithTimes);
+      _resultEntries.addAll(sortedDrivers);
       _resultEntries.addAll(driversWithStatus);
       _resultEntries.addAll(driversWithoutTimes);
     });
 
     ScaffoldMessenger.of(context).showSnackBar(
-      const SnackBar(
-        content: Text('Results calculated and reordered by race time'),
-        duration: Duration(seconds: 2),
+      SnackBar(
+        content: Text(
+          _penaltyEntries.any((p) => p.timePenaltySeconds != null && p.timePenaltySeconds! > 0)
+              ? 'Results calculated with penalties applied'
+              : 'Results calculated and reordered by race time'
+        ),
+        duration: const Duration(seconds: 2),
       ),
     );
   }
@@ -822,6 +859,9 @@ class _SessionPageState extends State<SessionPage> {
                 return _buildResultRow(entryIndex, entry);
               },
             ),
+            const SizedBox(height: 24),
+            // Penalty section
+            _buildPenaltySection(),
             const SizedBox(height: 80), // Space for bottom bar
           ],
         ),
@@ -1456,6 +1496,274 @@ class _SessionPageState extends State<SessionPage> {
             },
           ),
         ],
+      ),
+    );
+  }
+
+  Widget _buildPenaltySection() {
+    return Container(
+      padding: const EdgeInsets.all(12),
+      decoration: BoxDecoration(
+        gradient: LinearGradient(
+          colors: [Colors.grey.shade900, Colors.black87],
+        ),
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: widget.league.themeColor.withValues(alpha: 0.6), width: 2),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          // Clickable section header
+          InkWell(
+            onTap: () {
+              setState(() {
+                _isPenaltySectionExpanded = !_isPenaltySectionExpanded;
+              });
+            },
+            child: Row(
+              children: [
+                Icon(Icons.gavel, color: widget.league.themeColor, size: 20),
+                const SizedBox(width: 8),
+                const Text(
+                  'PENALTIES',
+                  style: TextStyle(
+                    color: Colors.white,
+                    fontSize: 16,
+                    fontWeight: FontWeight.w900,
+                    letterSpacing: 1.5,
+                  ),
+                ),
+                const Spacer(),
+                Icon(
+                  _isPenaltySectionExpanded ? Icons.keyboard_arrow_up : Icons.keyboard_arrow_down,
+                  color: widget.league.themeColor,
+                  size: 24,
+                ),
+              ],
+            ),
+          ),
+          // Conditionally show content when expanded
+          if (_isPenaltySectionExpanded) ...[
+            const SizedBox(height: 12),
+            // Header row
+            Container(
+              padding: const EdgeInsets.symmetric(vertical: 8, horizontal: 8),
+              decoration: BoxDecoration(
+                color: Colors.grey.shade900,
+                borderRadius: BorderRadius.circular(4),
+              ),
+              child: Row(
+                children: const [
+                  Expanded(
+                    flex: 3,
+                    child: Text(
+                      'Driver',
+                      style: TextStyle(
+                        color: Colors.white70,
+                        fontSize: 12,
+                        fontWeight: FontWeight.bold,
+                      ),
+                    ),
+                  ),
+                  SizedBox(
+                    width: 58,
+                    child: Text(
+                      'Time Pen (s)',
+                      textAlign: TextAlign.center,
+                      style: TextStyle(
+                        color: Colors.white70,
+                        fontSize: 12,
+                        fontWeight: FontWeight.bold,
+                      ),
+                    ),
+                  ),
+                  SizedBox(width: 8),
+                  SizedBox(
+                    width: 58,
+                    child: Text(
+                      'Penalty Pts',
+                      textAlign: TextAlign.center,
+                      style: TextStyle(
+                        color: Colors.white70,
+                        fontSize: 12,
+                        fontWeight: FontWeight.bold,
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+            const SizedBox(height: 8),
+            // Penalty entries
+            ...List.generate(_penaltyEntries.length, (index) {
+              return _buildPenaltyRow(index);
+            }),
+            // Add penalty button
+            const SizedBox(height: 8),
+            TextButton.icon(
+              onPressed: () {
+                setState(() {
+                  _penaltyEntries.add(_PenaltyEntry());
+                });
+              },
+              icon: Icon(Icons.add, color: widget.league.themeColor),
+              label: Text(
+                'Add Penalty',
+                style: TextStyle(color: widget.league.themeColor),
+              ),
+            ),
+          ],
+        ],
+      ),
+    );
+  }
+
+  Widget _buildPenaltyRow(int index) {
+    final penalty = _penaltyEntries[index];
+
+    return InkWell(
+      onLongPress: () async {
+        final shouldDelete = await showDialog<bool>(
+          context: context,
+          builder: (context) {
+            return AlertDialog(
+              title: const Text('Delete Penalty'),
+              content: const Text('Are you sure you want to delete this penalty?'),
+              actions: [
+                TextButton(
+                  onPressed: () => Navigator.of(context).pop(false),
+                  child: const Text('Cancel'),
+                ),
+                TextButton(
+                  onPressed: () => Navigator.of(context).pop(true),
+                  style: TextButton.styleFrom(
+                    foregroundColor: Colors.red,
+                  ),
+                  child: const Text('Delete'),
+                ),
+              ],
+            );
+          },
+        );
+
+        if (shouldDelete == true) {
+          setState(() {
+            _penaltyEntries.removeAt(index);
+          });
+        }
+      },
+      child: Container(
+        margin: const EdgeInsets.only(bottom: 8),
+        padding: const EdgeInsets.all(8),
+        decoration: BoxDecoration(
+          color: const Color(0xFF2A2A2A),
+          borderRadius: BorderRadius.circular(6),
+        ),
+        child: Row(
+          children: [
+            // Driver dropdown
+            Expanded(
+              flex: 3,
+              child: DropdownButtonFormField<String>(
+                value: penalty.driverId,
+                dropdownColor: Colors.grey.shade900,
+                style: const TextStyle(fontSize: 12, color: Colors.white),
+                decoration: InputDecoration(
+                  filled: true,
+                  fillColor: Colors.grey.shade900,
+                  border: OutlineInputBorder(
+                    borderRadius: BorderRadius.circular(6),
+                    borderSide: BorderSide.none,
+                  ),
+                  contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                  isDense: true,
+                ),
+                hint: const Text('Select driver', style: TextStyle(fontSize: 12, color: Colors.white70)),
+                items: _allDrivers.map((d) {
+                  return DropdownMenuItem<String>(
+                    value: d.id,
+                    child: Text(d.name),
+                  );
+                }).toList(),
+                onChanged: (value) {
+                  setState(() {
+                    penalty.driverId = value;
+                  });
+                },
+              ),
+            ),
+            const SizedBox(width: 8),
+            // Time penalty (seconds)
+            SizedBox(
+              width: 58,
+              child: TextFormField(
+                initialValue: penalty.timePenaltySeconds?.toString() ?? '',
+                keyboardType: TextInputType.number,
+                textAlign: TextAlign.center,
+                style: const TextStyle(
+                  color: Colors.white,
+                  fontSize: 12,
+                  fontWeight: FontWeight.w600,
+                ),
+                decoration: InputDecoration(
+                  filled: true,
+                  fillColor: Colors.grey.shade900,
+                  hintText: '0',
+                  hintStyle: TextStyle(color: Colors.grey.shade600),
+                  border: OutlineInputBorder(
+                    borderRadius: BorderRadius.circular(6),
+                    borderSide: BorderSide.none,
+                  ),
+                  contentPadding: const EdgeInsets.symmetric(horizontal: 8, vertical: 8),
+                  isDense: true,
+                ),
+                inputFormatters: [
+                  FilteringTextInputFormatter.digitsOnly,
+                ],
+                onChanged: (value) {
+                  setState(() {
+                    penalty.timePenaltySeconds = value.isEmpty ? null : int.tryParse(value);
+                  });
+                },
+              ),
+            ),
+            const SizedBox(width: 8),
+            // Penalty points
+            SizedBox(
+              width: 58,
+              child: TextFormField(
+                initialValue: penalty.penaltyPoints?.toString() ?? '',
+                keyboardType: TextInputType.number,
+                textAlign: TextAlign.center,
+                style: const TextStyle(
+                  color: Colors.white,
+                  fontSize: 12,
+                  fontWeight: FontWeight.w600,
+                ),
+                decoration: InputDecoration(
+                  filled: true,
+                  fillColor: Colors.grey.shade900,
+                  hintText: '0',
+                  hintStyle: TextStyle(color: Colors.grey.shade600),
+                  border: OutlineInputBorder(
+                    borderRadius: BorderRadius.circular(6),
+                    borderSide: BorderSide.none,
+                  ),
+                  contentPadding: const EdgeInsets.symmetric(horizontal: 8, vertical: 8),
+                  isDense: true,
+                ),
+                inputFormatters: [
+                  FilteringTextInputFormatter.digitsOnly,
+                ],
+                onChanged: (value) {
+                  setState(() {
+                    penalty.penaltyPoints = value.isEmpty ? null : int.tryParse(value);
+                  });
+                },
+              ),
+            ),
+          ],
+        ),
       ),
     );
   }
