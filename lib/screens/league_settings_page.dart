@@ -3,6 +3,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_colorpicker/flutter_colorpicker.dart';
+import 'package:flutter_svg/flutter_svg.dart';
 
 import '../models/league.dart';
 import '../repositories/competition_repository.dart';
@@ -33,16 +34,38 @@ class _LeagueSettingsPageState extends State<LeagueSettingsPage> {
   String? _memberCode;
   String? _adminCode;
 
+  // Social media URLs
+  late TextEditingController _tiktokController;
+  late TextEditingController _twitchController;
+  late TextEditingController _instagramController;
+  late TextEditingController _youtubeController;
+  late TextEditingController _twitterController;
+  late TextEditingController _discordController;
+
   @override
   void initState() {
     super.initState();
     _selectedColor = widget.league.themeColor;
     _hexController.text = _colorToHex(_selectedColor);
+
+    // Initialize social media controllers with existing values
+    _tiktokController = TextEditingController(text: widget.league.tiktokUrl ?? '');
+    _twitchController = TextEditingController(text: widget.league.twitchUrl ?? '');
+    _instagramController = TextEditingController(text: widget.league.instagramUrl ?? '');
+    _youtubeController = TextEditingController(text: widget.league.youtubeUrl ?? '');
+    _twitterController = TextEditingController(text: widget.league.twitterUrl ?? '');
+    _discordController = TextEditingController(text: widget.league.discordUrl ?? '');
   }
 
   @override
   void dispose() {
     _hexController.dispose();
+    _tiktokController.dispose();
+    _twitchController.dispose();
+    _instagramController.dispose();
+    _youtubeController.dispose();
+    _twitterController.dispose();
+    _discordController.dispose();
     super.dispose();
   }
 
@@ -456,6 +479,116 @@ class _LeagueSettingsPageState extends State<LeagueSettingsPage> {
     );
   }
 
+  Widget _buildSocialMediaSection() {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        _buildSubHeader('Social Media'),
+        Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              const Text(
+                'Add your social media links - they will appear as clickable icons',
+                style: TextStyle(fontSize: 14, color: Colors.grey),
+              ),
+              const SizedBox(height: 16),
+              _buildSocialMediaField(
+                label: 'TikTok',
+                iconAsset: 'assets/flags/socialmedia/tiktok.svg',
+                color: Colors.black,
+                controller: _tiktokController,
+                hint: 'https://tiktok.com/@yourhandle',
+              ),
+              const SizedBox(height: 12),
+              _buildSocialMediaField(
+                label: 'Twitch',
+                iconAsset: 'assets/flags/socialmedia/twitch.svg',
+                color: const Color(0xFF9146FF),
+                controller: _twitchController,
+                hint: 'https://twitch.tv/yourhandle',
+              ),
+              const SizedBox(height: 12),
+              _buildSocialMediaField(
+                label: 'Instagram',
+                iconAsset: 'assets/flags/socialmedia/instagram.svg',
+                color: const Color(0xFFE4405F),
+                controller: _instagramController,
+                hint: 'https://instagram.com/yourhandle',
+              ),
+              const SizedBox(height: 12),
+              _buildSocialMediaField(
+                label: 'YouTube',
+                iconAsset: 'assets/flags/socialmedia/youtube.svg',
+                color: const Color(0xFFFF0000),
+                controller: _youtubeController,
+                hint: 'https://youtube.com/@yourhandle',
+              ),
+              const SizedBox(height: 12),
+              _buildSocialMediaField(
+                label: 'X',
+                iconAsset: 'assets/flags/socialmedia/x.svg',
+                color: Colors.black,
+                controller: _twitterController,
+                hint: 'https://x.com/yourhandle',
+              ),
+              const SizedBox(height: 12),
+              _buildSocialMediaField(
+                label: 'Discord',
+                iconAsset: 'assets/flags/socialmedia/discord.svg',
+                color: const Color(0xFF5865F2),
+                controller: _discordController,
+                hint: 'https://discord.gg/yourinvite',
+              ),
+            ],
+          ),
+        ),
+        const Divider(height: 32, thickness: 2),
+      ],
+    );
+  }
+
+  Widget _buildSocialMediaField({
+    required String label,
+    required String iconAsset,
+    required Color color,
+    required TextEditingController controller,
+    required String hint,
+  }) {
+    return Row(
+      children: [
+        Container(
+          width: 48,
+          height: 48,
+          decoration: BoxDecoration(
+            color: color,
+            shape: BoxShape.circle,
+          ),
+          child: Padding(
+            padding: const EdgeInsets.all(12),
+            child: SvgPicture.asset(
+              iconAsset,
+              colorFilter: const ColorFilter.mode(Colors.white, BlendMode.srcIn),
+            ),
+          ),
+        ),
+        const SizedBox(width: 12),
+        Expanded(
+          child: TextField(
+            controller: controller,
+            decoration: InputDecoration(
+              labelText: label,
+              hintText: hint,
+              border: const OutlineInputBorder(),
+              contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+            ),
+          ),
+        ),
+      ],
+    );
+  }
+
   Widget _buildCompetitionsSection() {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
@@ -509,16 +642,27 @@ class _LeagueSettingsPageState extends State<LeagueSettingsPage> {
                 colorValue,
               );
 
+              // Save social media URLs
+              await widget.leagueRepository.updateLeagueSocialMedia(
+                widget.league.id,
+                tiktokUrl: _tiktokController.text.trim().isEmpty ? null : _tiktokController.text.trim(),
+                twitchUrl: _twitchController.text.trim().isEmpty ? null : _twitchController.text.trim(),
+                instagramUrl: _instagramController.text.trim().isEmpty ? null : _instagramController.text.trim(),
+                youtubeUrl: _youtubeController.text.trim().isEmpty ? null : _youtubeController.text.trim(),
+                twitterUrl: _twitterController.text.trim().isEmpty ? null : _twitterController.text.trim(),
+                discordUrl: _discordController.text.trim().isEmpty ? null : _discordController.text.trim(),
+              );
+
               if (!mounted) return;
 
               messenger.showSnackBar(
                 const SnackBar(
-                  content: Text('Color saved! Re-enter the league to see the new theme.'),
+                  content: Text('Settings saved! Re-enter the league to see changes.'),
                   duration: Duration(seconds: 3),
                 ),
               );
 
-              // Return true to signal that color was changed
+              // Return true to signal that settings were changed
               navigator.pop(true);
             },
             tooltip: 'Save Settings',
@@ -531,6 +675,7 @@ class _LeagueSettingsPageState extends State<LeagueSettingsPage> {
           children: [
             _buildSectionHeader('Settings'),
             _buildChangeLeagueColourSection(),
+            _buildSocialMediaSection(),
             _buildInviteToViewSection(),
             _buildInviteAsAdminSection(),
             _buildCompetitionsSection(),

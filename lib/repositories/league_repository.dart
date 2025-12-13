@@ -16,6 +16,17 @@ abstract class LeagueRepository {
 
   /// Update the theme color for a league.
   Future<void> updateLeagueThemeColor(String leagueId, int colorValue);
+
+  /// Update social media URLs for a league.
+  Future<void> updateLeagueSocialMedia(
+    String leagueId, {
+    String? tiktokUrl,
+    String? twitchUrl,
+    String? instagramUrl,
+    String? youtubeUrl,
+    String? twitterUrl,
+    String? discordUrl,
+  });
 }
 
 class InMemoryLeagueRepository implements LeagueRepository {
@@ -122,6 +133,45 @@ class InMemoryLeagueRepository implements LeagueRepository {
         createdAt: oldLeague.createdAt,
         joinCode: oldLeague.joinCode,
         themeColorValue: colorValue,
+        tiktokUrl: oldLeague.tiktokUrl,
+        twitchUrl: oldLeague.twitchUrl,
+        instagramUrl: oldLeague.instagramUrl,
+        youtubeUrl: oldLeague.youtubeUrl,
+        twitterUrl: oldLeague.twitterUrl,
+        discordUrl: oldLeague.discordUrl,
+      );
+      _allLeagues[index] = updatedLeague;
+    }
+  }
+
+  @override
+  Future<void> updateLeagueSocialMedia(
+    String leagueId, {
+    String? tiktokUrl,
+    String? twitchUrl,
+    String? instagramUrl,
+    String? youtubeUrl,
+    String? twitterUrl,
+    String? discordUrl,
+  }) async {
+    await Future.delayed(const Duration(milliseconds: 100));
+
+    final index = _allLeagues.indexWhere((l) => l.id == leagueId);
+    if (index != -1) {
+      final oldLeague = _allLeagues[index];
+      final updatedLeague = League(
+        id: oldLeague.id,
+        name: oldLeague.name,
+        organiserName: oldLeague.organiserName,
+        createdAt: oldLeague.createdAt,
+        joinCode: oldLeague.joinCode,
+        themeColorValue: oldLeague.themeColorValue,
+        tiktokUrl: tiktokUrl,
+        twitchUrl: twitchUrl,
+        instagramUrl: instagramUrl,
+        youtubeUrl: youtubeUrl,
+        twitterUrl: twitterUrl,
+        discordUrl: discordUrl,
       );
       _allLeagues[index] = updatedLeague;
     }

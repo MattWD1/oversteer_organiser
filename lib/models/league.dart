@@ -8,6 +8,14 @@ class League {
   final String joinCode; // simple invite/join code, e.g. 6 chars
   final int? themeColorValue; // Store color as int (0xFFRRGGBB format)
 
+  // Social media URLs
+  final String? tiktokUrl;
+  final String? twitchUrl;
+  final String? instagramUrl;
+  final String? youtubeUrl;
+  final String? twitterUrl;
+  final String? discordUrl;
+
   const League({
     required this.id,
     required this.name,
@@ -15,6 +23,12 @@ class League {
     required this.createdAt,
     required this.joinCode,
     this.themeColorValue,
+    this.tiktokUrl,
+    this.twitchUrl,
+    this.instagramUrl,
+    this.youtubeUrl,
+    this.twitterUrl,
+    this.discordUrl,
   });
 
   // Helper getter to convert int to Color

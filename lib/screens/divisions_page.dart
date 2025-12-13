@@ -2,6 +2,8 @@
 
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:flutter_svg/flutter_svg.dart';
+import 'package:url_launcher/url_launcher.dart';
 
 import '../models/league.dart';
 import '../models/competition.dart';
@@ -392,6 +394,124 @@ class _DivisionsPageState extends State<DivisionsPage> {
     );
   }
 
+  // ---------- Social Media ----------
+
+  Future<void> _launchUrl(String url) async {
+    final uri = Uri.parse(url);
+    if (!await launchUrl(uri, mode: LaunchMode.externalApplication)) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Could not launch $url')),
+      );
+    }
+  }
+
+  Widget _buildSocialMediaIcons() {
+    final List<Widget> icons = [];
+
+    // TikTok
+    if (widget.league.tiktokUrl != null && widget.league.tiktokUrl!.isNotEmpty) {
+      icons.add(_buildSocialIcon(
+        iconAsset: 'assets/flags/socialmedia/tiktok.svg',
+        color: Colors.black,
+        url: widget.league.tiktokUrl!,
+      ));
+    }
+
+    // Twitch
+    if (widget.league.twitchUrl != null && widget.league.twitchUrl!.isNotEmpty) {
+      icons.add(_buildSocialIcon(
+        iconAsset: 'assets/flags/socialmedia/twitch.svg',
+        color: const Color(0xFF9146FF),
+        url: widget.league.twitchUrl!,
+      ));
+    }
+
+    // Instagram
+    if (widget.league.instagramUrl != null && widget.league.instagramUrl!.isNotEmpty) {
+      icons.add(_buildSocialIcon(
+        iconAsset: 'assets/flags/socialmedia/instagram.svg',
+        color: const Color(0xFFE4405F),
+        url: widget.league.instagramUrl!,
+      ));
+    }
+
+    // YouTube
+    if (widget.league.youtubeUrl != null && widget.league.youtubeUrl!.isNotEmpty) {
+      icons.add(_buildSocialIcon(
+        iconAsset: 'assets/flags/socialmedia/youtube.svg',
+        color: const Color(0xFFFF0000),
+        url: widget.league.youtubeUrl!,
+      ));
+    }
+
+    // X (formerly Twitter)
+    if (widget.league.twitterUrl != null && widget.league.twitterUrl!.isNotEmpty) {
+      icons.add(_buildSocialIcon(
+        iconAsset: 'assets/flags/socialmedia/x.svg',
+        color: Colors.black,
+        url: widget.league.twitterUrl!,
+      ));
+    }
+
+    // Discord
+    if (widget.league.discordUrl != null && widget.league.discordUrl!.isNotEmpty) {
+      icons.add(_buildSocialIcon(
+        iconAsset: 'assets/flags/socialmedia/discord.svg',
+        color: const Color(0xFF5865F2),
+        url: widget.league.discordUrl!,
+      ));
+    }
+
+    if (icons.isEmpty) {
+      return const SizedBox.shrink();
+    }
+
+    return Padding(
+      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+      child: Row(
+        mainAxisAlignment: MainAxisAlignment.center,
+        children: icons,
+      ),
+    );
+  }
+
+  Widget _buildSocialIcon({
+    required String iconAsset,
+    required Color color,
+    required String url,
+  }) {
+    return Padding(
+      padding: const EdgeInsets.symmetric(horizontal: 6),
+      child: InkWell(
+        onTap: () => _launchUrl(url),
+        borderRadius: BorderRadius.circular(24),
+        child: Container(
+          width: 48,
+          height: 48,
+          decoration: BoxDecoration(
+            color: color,
+            shape: BoxShape.circle,
+            boxShadow: [
+              BoxShadow(
+                color: color.withValues(alpha: 0.4),
+                blurRadius: 8,
+                spreadRadius: 1,
+              ),
+            ],
+          ),
+          child: Padding(
+            padding: const EdgeInsets.all(12),
+            child: SvgPicture.asset(
+              iconAsset,
+              colorFilter: const ColorFilter.mode(Colors.white, BlendMode.srcIn),
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+
   // ---------- Tabs ----------
 
   Widget _buildDivisionsTab() {
@@ -427,17 +547,28 @@ class _DivisionsPageState extends State<DivisionsPage> {
             .toList();
 
         if (activeDivisions.isEmpty) {
-          return const Center(
-            child: Text(
-              'No active divisions. Archived divisions are in the archive.',
-            ),
+          return Column(
+            children: [
+              _buildSocialMediaIcons(),
+              const Expanded(
+                child: Center(
+                  child: Text(
+                    'No active divisions. Archived divisions are in the archive.',
+                  ),
+                ),
+              ),
+            ],
           );
         }
 
-        return ListView.builder(
-          itemCount: activeDivisions.length,
-          itemBuilder: (context, index) {
-            final division = activeDivisions[index];
+        return Column(
+          children: [
+            _buildSocialMediaIcons(),
+            Expanded(
+              child: ListView.builder(
+                itemCount: activeDivisions.length,
+                itemBuilder: (context, index) {
+                  final division = activeDivisions[index];
 
             return Dismissible(
               key: Key(division.id),
@@ -630,6 +761,9 @@ class _DivisionsPageState extends State<DivisionsPage> {
               ),
             );
           },
+        ),
+      ),
+    ],
         );
       },
     );
