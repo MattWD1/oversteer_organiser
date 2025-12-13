@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:flutter_svg/flutter_svg.dart';
 
 import '../models/event.dart';
 import '../models/driver.dart';
@@ -826,6 +827,8 @@ class _SessionPageState extends State<SessionPage> {
                 padding: const EdgeInsets.all(8),
                 child: Column(
                   children: [
+                    _buildTrackInfoSection(),
+                    const SizedBox(height: 12),
                     // Qualifying and fastest lap section
                     _buildQualifyingAndFastestLapSection(),
                     const SizedBox(height: 16),
@@ -952,30 +955,38 @@ class _SessionPageState extends State<SessionPage> {
   Widget _buildHeaderRow() {
     return Container(
       key: const ValueKey('header'),
-      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 12),
+      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 12),
       decoration: BoxDecoration(
-        color: const Color(0xFF2A2A2A),
-        borderRadius: BorderRadius.circular(8),
+        gradient: LinearGradient(
+          colors: [
+            Colors.black.withValues(alpha: 0.9),
+            Colors.grey.shade900,
+          ],
+          begin: Alignment.topLeft,
+          end: Alignment.bottomRight,
+        ),
+        borderRadius: BorderRadius.circular(10),
+        border: Border.all(
+          color: widget.league.themeColor.withValues(alpha: 0.55),
+          width: 2,
+        ),
+        boxShadow: [
+          BoxShadow(
+            color: widget.league.themeColor.withValues(alpha: 0.35),
+            blurRadius: 18,
+            spreadRadius: 1,
+          ),
+        ],
       ),
       child: Row(
         children: [
           const SizedBox(width: 40), // Space for drag handle
-          const SizedBox(
+          SizedBox(
             width: 30,
-            child: Text(
-              'Pos.',
-              style: TextStyle(
-                fontWeight: FontWeight.bold,
-                color: Colors.white,
-                fontSize: 12,
-              ),
-            ),
-          ),
-          Expanded(
-            child: Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 4),
+            child: Transform.translate(
+              offset: const Offset(-25, 0),
               child: const Text(
-                'Driver',
+                'Pos.',
                 style: TextStyle(
                   fontWeight: FontWeight.bold,
                   color: Colors.white,
@@ -983,23 +994,42 @@ class _SessionPageState extends State<SessionPage> {
                 ),
               ),
             ),
-          ),
-          const SizedBox(
-            width: 96, // Width for grid +/- buttons
-            child: Text(
-              'Grid',
-              style: TextStyle(
-                fontWeight: FontWeight.bold,
-                color: Colors.white,
-                fontSize: 12,
-              ),
-              textAlign: TextAlign.center,
             ),
-          ),
-        ],
-      ),
-    );
-  }
+            Expanded(
+              child: Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 4),
+                child: Transform.translate(
+                  offset: const Offset(-10, 0),
+                  child: const Text(
+                    'Driver',
+                    style: TextStyle(
+                      fontWeight: FontWeight.bold,
+                      color: Colors.white,
+                      fontSize: 12,
+                    ),
+                  ),
+                ),
+              ),
+            ),
+            SizedBox(
+              width: 96, // Width for grid +/- buttons
+              child: Transform.translate(
+                offset: const Offset(-5, 0),
+                child: const Text(
+                  'Grid',
+                  style: TextStyle(
+                    fontWeight: FontWeight.bold,
+                    color: Colors.white,
+                    fontSize: 12,
+                  ),
+                  textAlign: TextAlign.center,
+                ),
+              ),
+            ),
+          ],
+        ),
+      );
+    }
 
   Widget _buildResultRow(int index, _ResultEntry entry) {
     final position = index + 1;
@@ -1316,6 +1346,196 @@ class _SessionPageState extends State<SessionPage> {
       ),
     );
   }
+
+  Widget _buildTrackInfoSection() {
+    final flagEmoji = widget.event.flagEmoji;
+    final trackName = _expandedTrackName(widget.event.name);
+
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(
+        gradient: LinearGradient(
+          colors: [Colors.grey.shade900, Colors.black87],
+          begin: Alignment.topLeft,
+          end: Alignment.bottomRight,
+        ),
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(
+          color: widget.league.themeColor.withValues(alpha: 0.6),
+          width: 2,
+        ),
+        boxShadow: [
+          BoxShadow(
+            color: widget.league.themeColor.withValues(alpha: 0.3),
+            blurRadius: 20,
+            spreadRadius: 2,
+          ),
+        ],
+      ),
+      child: Row(
+        children: [
+          _buildFlagIcon(flagEmoji),
+          const SizedBox(width: 16),
+          Expanded(
+            child: Text(
+              trackName,
+              style: const TextStyle(
+                color: Colors.white,
+                fontSize: 20,
+                fontWeight: FontWeight.w900,
+                letterSpacing: 1,
+              ),
+              overflow: TextOverflow.ellipsis,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildFlagIcon(String? flagEmoji) {
+    final assetPath = _resolveFlagAsset(flagEmoji, widget.event.name);
+    if (assetPath != null) {
+      return ClipRRect(
+        borderRadius: BorderRadius.circular(4),
+        child: SvgPicture.asset(
+          assetPath,
+          width: 54,
+          height: 36,
+          fit: BoxFit.cover,
+          placeholderBuilder: (_) => _fallbackFlag(flagEmoji),
+        ),
+      );
+    }
+
+    return _fallbackFlag(flagEmoji);
+  }
+
+  Widget _fallbackFlag(String? flagEmoji) {
+    return Container(
+      width: 54,
+      height: 36,
+      alignment: Alignment.center,
+      decoration: BoxDecoration(
+        color: Colors.white.withValues(alpha: 0.08),
+        borderRadius: BorderRadius.circular(4),
+        border: Border.all(
+          color: Colors.white24,
+          width: 1,
+        ),
+      ),
+      child: Text(
+        flagEmoji ?? '🏁',
+        style: const TextStyle(fontSize: 22),
+      ),
+    );
+  }
+
+  String _expandedTrackName(String name) {
+    // Replace trailing "GP" with "Grand Prix" for display
+    final trimmed = name.trim();
+    final lower = trimmed.toLowerCase();
+    if (lower.endsWith(' gp')) {
+      return '${trimmed.substring(0, trimmed.length - 2).trim()} Grand Prix';
+    }
+    return trimmed;
+  }
+
+  String? _countryCodeFromFlagEmoji(String emoji) {
+    if (emoji.runes.length != 2) return null;
+    final runes = emoji.runes.toList();
+    const base = 0x1F1E6;
+    final codeUnits = [
+      runes[0] - base + 65,
+      runes[1] - base + 65,
+    ];
+    if (codeUnits.any((u) => u < 65 || u > 90)) return null;
+    return String.fromCharCodes(codeUnits);
+  }
+
+  String? _resolveFlagAsset(String? flagEmoji, String trackName) {
+    final codeFromEmoji =
+        flagEmoji != null ? _countryCodeFromFlagEmoji(flagEmoji) : null;
+    if (codeFromEmoji != null) {
+      return 'assets/flags/${codeFromEmoji.toLowerCase()}.svg';
+    }
+
+    final codeFromLetters = _countryCodeFromLetters(flagEmoji);
+    if (codeFromLetters != null) {
+      return 'assets/flags/${codeFromLetters.toLowerCase()}.svg';
+    }
+
+    final codeFromTrack = _countryCodeFromTrackName(trackName);
+    if (codeFromTrack != null) {
+      return 'assets/flags/${codeFromTrack.toLowerCase()}.svg';
+    }
+
+    return null;
+  }
+
+  String? _countryCodeFromLetters(String? value) {
+    if (value == null) return null;
+    final letters = value.replaceAll(RegExp('[^A-Za-z]'), '').toUpperCase();
+    if (letters.length >= 2) {
+      return letters.substring(letters.length - 2);
+    }
+    return null;
+  }
+
+  String? _countryCodeFromTrackName(String name) {
+    final lower = name.toLowerCase();
+    for (final entry in _trackCountryMap.entries) {
+      if (lower.contains(entry.key)) {
+        return entry.value;
+      }
+    }
+    return null;
+  }
+
+  static const Map<String, String> _trackCountryMap = {
+    'bahrain': 'BH',
+    'saudi': 'SA',
+    'jeddah': 'SA',
+    'australia': 'AU',
+    'melbourne': 'AU',
+    'china': 'CN',
+    'shanghai': 'CN',
+    'japan': 'JP',
+    'suzuka': 'JP',
+    'miami': 'US',
+    'americas': 'US',
+    'cota': 'US',
+    'vegas': 'US',
+    'austin': 'US',
+    'italy': 'IT',
+    'imola': 'IT',
+    'monza': 'IT',
+    'monaco': 'MC',
+    'spain': 'ES',
+    'catalunya': 'ES',
+    'canada': 'CA',
+    'austria': 'AT',
+    'silverstone': 'GB',
+    'britain': 'GB',
+    'belgium': 'BE',
+    'spa': 'BE',
+    'hungary': 'HU',
+    'zandvoort': 'NL',
+    'netherlands': 'NL',
+    'baku': 'AZ',
+    'azerbaijan': 'AZ',
+    'singapore': 'SG',
+    'qatar': 'QA',
+    'abu dhabi': 'AE',
+    'yas marina': 'AE',
+    'brazil': 'BR',
+    'interlagos': 'BR',
+    'mexico': 'MX',
+    'lusail': 'QA',
+    'france': 'FR',
+    'usa': 'US',
+  };
 
   Widget _buildQualifyingAndFastestLapSection() {
     return Container(
