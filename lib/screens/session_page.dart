@@ -758,17 +758,11 @@ class _SessionPageState extends State<SessionPage> {
         backgroundColor: Colors.transparent,
         foregroundColor: Colors.white,
         elevation: 0,
-        title: Row(
-          children: [
-            if (widget.event.flagEmoji != null) ...[
-              Text(
-                widget.event.flagEmoji!,
-                style: const TextStyle(fontSize: 24),
-              ),
-              const SizedBox(width: 8),
-            ],
-            Text(widget.event.name),
-          ],
+        title: Text(
+          widget.event.name,
+          maxLines: 1,
+          overflow: TextOverflow.ellipsis,
+          softWrap: false,
         ),
         actions: [
           IconButton(
