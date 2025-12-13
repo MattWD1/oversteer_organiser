@@ -208,7 +208,7 @@ class _DivisionInformationPageState extends State<DivisionInformationPage> {
         Padding(
           padding: const EdgeInsets.all(16),
           child: ElevatedButton.icon(
-            onPressed: () => _exportToCalendar(events),
+            onPressed: () => _showEventSelectionDialog(events),
             icon: const Icon(Icons.calendar_today),
             label: const Text('Add Events to Calendar'),
             style: ElevatedButton.styleFrom(
@@ -261,7 +261,7 @@ class _DivisionInformationPageState extends State<DivisionInformationPage> {
     );
   }
 
-  Future<void> _exportToCalendar(List<Event> events) async {
+  void _showEventSelectionDialog(List<Event> events) {
     // Filter events that have start times
     final eventsWithTimes = events.where((e) => e.startTime != null).toList();
 
@@ -275,42 +275,215 @@ class _DivisionInformationPageState extends State<DivisionInformationPage> {
       return;
     }
 
-    int successCount = 0;
-    int errorCount = 0;
+    // Create a map to track selected events
+    final Map<String, bool> selectedEvents = {
+      for (var event in eventsWithTimes) event.id: true, // All selected by default
+    };
 
-    for (final event in eventsWithTimes) {
-      try {
-        final calendarEvent = calendar.Event(
-          title: '${event.name} - ${widget.league.name}',
-          description: widget.division.name,
-          location: '',
-          startDate: event.startTime!,
-          endDate: event.endTime ?? event.startTime!.add(const Duration(hours: 2)),
+    showDialog(
+      context: context,
+      builder: (context) {
+        return StatefulBuilder(
+          builder: (context, setDialogState) {
+            return AlertDialog(
+              title: const Text('Select Events to Add'),
+              content: SizedBox(
+                width: double.maxFinite,
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    const Text(
+                      'Choose which events to add to your calendar:',
+                      style: TextStyle(fontSize: 14, color: Colors.grey),
+                    ),
+                    const SizedBox(height: 16),
+                    Flexible(
+                      child: ListView.builder(
+                        shrinkWrap: true,
+                        itemCount: eventsWithTimes.length,
+                        itemBuilder: (context, index) {
+                          final event = eventsWithTimes[index];
+                          final isSelected = selectedEvents[event.id] ?? false;
+
+                          return CheckboxListTile(
+                            value: isSelected,
+                            onChanged: (value) {
+                              setDialogState(() {
+                                selectedEvents[event.id] = value ?? false;
+                              });
+                            },
+                            activeColor: widget.league.themeColor,
+                            title: Row(
+                              children: [
+                                if (event.flagEmoji != null)
+                                  Padding(
+                                    padding: const EdgeInsets.only(right: 8),
+                                    child: Text(
+                                      event.flagEmoji!,
+                                      style: const TextStyle(fontSize: 20),
+                                    ),
+                                  ),
+                                Expanded(child: Text(event.name)),
+                              ],
+                            ),
+                            subtitle: Text(
+                              '${DateFormat('MMM d, yyyy').format(event.date)} at ${DateFormat('HH:mm').format(event.startTime!)}',
+                              style: const TextStyle(fontSize: 12),
+                            ),
+                          );
+                        },
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              actions: [
+                TextButton(
+                  onPressed: () => Navigator.of(context).pop(),
+                  child: const Text('Cancel'),
+                ),
+                ElevatedButton(
+                  onPressed: () {
+                    // Get selected events
+                    final selected = eventsWithTimes
+                        .where((event) => selectedEvents[event.id] == true)
+                        .toList();
+
+                    if (selected.isEmpty) {
+                      ScaffoldMessenger.of(context).showSnackBar(
+                        const SnackBar(
+                          content: Text('Please select at least one event'),
+                          duration: Duration(seconds: 2),
+                        ),
+                      );
+                      return;
+                    }
+
+                    Navigator.of(context).pop();
+                    _exportToCalendar(selected);
+                  },
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: widget.league.themeColor,
+                    foregroundColor: Colors.white,
+                  ),
+                  child: const Text('Add to Calendar'),
+                ),
+              ],
+            );
+          },
         );
+      },
+    );
+  }
 
-        final result = await calendar.Add2Calendar.addEvent2Cal(calendarEvent);
-        if (result) {
-          successCount++;
-        } else {
-          errorCount++;
-        }
-      } catch (e) {
-        errorCount++;
-      }
-    }
+  Future<void> _exportToCalendar(List<Event> selectedEvents) async {
+    if (selectedEvents.isEmpty) return;
 
-    if (!mounted) return;
+    // Show progress dialog
+    int currentIndex = 0;
 
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(
-        content: Text(
-          successCount > 0
-              ? 'Successfully added $successCount event${successCount > 1 ? 's' : ''} to calendar${errorCount > 0 ? ' ($errorCount failed)' : ''}'
-              : 'Failed to add events to calendar',
-        ),
-        duration: const Duration(seconds: 3),
-        backgroundColor: successCount > 0 ? Colors.green : widget.league.themeColor,
-      ),
+    await showDialog(
+      context: context,
+      barrierDismissible: false,
+      builder: (dialogContext) {
+        return StatefulBuilder(
+          builder: (context, setDialogState) {
+            return AlertDialog(
+              title: const Text('Adding Events to Calendar'),
+              content: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Text(
+                    'Event ${currentIndex + 1} of ${selectedEvents.length}',
+                    style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
+                  ),
+                  const SizedBox(height: 8),
+                  Text(
+                    selectedEvents[currentIndex].name,
+                    style: const TextStyle(fontSize: 14),
+                    textAlign: TextAlign.center,
+                  ),
+                  const SizedBox(height: 16),
+                  LinearProgressIndicator(
+                    value: (currentIndex + 1) / selectedEvents.length,
+                    backgroundColor: Colors.grey.shade300,
+                    valueColor: AlwaysStoppedAnimation<Color>(widget.league.themeColor),
+                  ),
+                  const SizedBox(height: 16),
+                  const Text(
+                    'Tap "Add Event" to open your calendar app.\nSave the event, then return here to continue.',
+                    style: TextStyle(fontSize: 12, color: Colors.grey),
+                    textAlign: TextAlign.center,
+                  ),
+                ],
+              ),
+              actions: [
+                if (currentIndex > 0)
+                  TextButton(
+                    onPressed: () {
+                      Navigator.of(dialogContext).pop();
+                    },
+                    child: const Text('Cancel'),
+                  ),
+                ElevatedButton(
+                  onPressed: () async {
+                    final event = selectedEvents[currentIndex];
+                    final messenger = ScaffoldMessenger.of(context);
+                    final navigator = Navigator.of(dialogContext);
+
+                    try {
+                      final calendarEvent = calendar.Event(
+                        title: '${event.name} - ${widget.league.name}',
+                        description: widget.division.name,
+                        location: '',
+                        startDate: event.startTime!,
+                        endDate: event.endTime ?? event.startTime!.add(const Duration(hours: 2)),
+                      );
+
+                      await calendar.Add2Calendar.addEvent2Cal(calendarEvent);
+
+                      // Move to next event or close dialog
+                      if (currentIndex < selectedEvents.length - 1) {
+                        setDialogState(() {
+                          currentIndex++;
+                        });
+                      } else {
+                        // All events processed
+                        navigator.pop();
+
+                        if (!mounted) return;
+
+                        messenger.showSnackBar(
+                          SnackBar(
+                            content: Text('All ${selectedEvents.length} events have been processed!'),
+                            duration: const Duration(seconds: 3),
+                            backgroundColor: Colors.green,
+                          ),
+                        );
+                      }
+                    } catch (e) {
+                      if (!mounted) return;
+
+                      messenger.showSnackBar(
+                        SnackBar(
+                          content: Text('Error adding ${event.name}: $e'),
+                          duration: const Duration(seconds: 2),
+                          backgroundColor: Colors.red,
+                        ),
+                      );
+                    }
+                  },
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: widget.league.themeColor,
+                    foregroundColor: Colors.white,
+                  ),
+                  child: Text(currentIndex < selectedEvents.length - 1 ? 'Add Event & Continue' : 'Add Final Event'),
+                ),
+              ],
+            );
+          },
+        );
+      },
     );
   }
 

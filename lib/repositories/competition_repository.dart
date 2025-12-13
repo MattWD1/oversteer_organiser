@@ -26,6 +26,9 @@ abstract class CompetitionRepository {
 
   /// Permanently delete a division (both active and archived).
   Future<void> deleteDivision(String divisionId);
+
+  /// Update the name of a division.
+  Future<void> updateDivisionName(String divisionId, String newName);
 }
 
 class InMemoryCompetitionRepository implements CompetitionRepository {
@@ -149,5 +152,27 @@ class InMemoryCompetitionRepository implements CompetitionRepository {
     await Future.delayed(const Duration(milliseconds: 100));
     _divisions.removeWhere((d) => d.id == divisionId);
     _archivedDivisionIds.remove(divisionId);
+  }
+
+  @override
+  Future<void> updateDivisionName(String divisionId, String newName) async {
+    await Future.delayed(const Duration(milliseconds: 100));
+
+    // Find the division to update
+    final index = _divisions.indexWhere((d) => d.id == divisionId);
+    if (index == -1) return; // Division not found
+
+    // Get the existing division
+    final existingDivision = _divisions[index];
+
+    // Create a new division with the updated name
+    final updatedDivision = Division(
+      id: existingDivision.id,
+      competitionId: existingDivision.competitionId,
+      name: newName,
+    );
+
+    // Replace the old division with the updated one
+    _divisions[index] = updatedDivision;
   }
 }

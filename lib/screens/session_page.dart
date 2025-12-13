@@ -201,8 +201,11 @@ class _PenaltyEntry {
   int? penaltyPoints; // Championship penalty points
 
   _PenaltyEntry({
+    // ignore: unused_element_parameter
     this.driverId,
+    // ignore: unused_element_parameter
     this.timePenaltySeconds,
+    // ignore: unused_element_parameter
     this.penaltyPoints,
   });
 }

@@ -316,6 +316,82 @@ class _DivisionsPageState extends State<DivisionsPage> {
     );
   }
 
+  // ---------- Edit Division ----------
+
+  Future<void> _showEditDivisionDialog(Division division) async {
+    final controller = TextEditingController(text: division.name);
+
+    final newName = await showDialog<String>(
+      context: context,
+      builder: (context) {
+        return AlertDialog(
+          title: const Text('Edit Division Name'),
+          content: TextField(
+            controller: controller,
+            maxLength: 50,
+            autofocus: true,
+            inputFormatters: [
+              LengthLimitingTextInputFormatter(50),
+            ],
+            decoration: const InputDecoration(
+              labelText: 'Division name',
+              border: OutlineInputBorder(),
+            ),
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.of(context).pop<String>(null),
+              child: const Text('Cancel'),
+            ),
+            ElevatedButton(
+              onPressed: () {
+                final text = controller.text.trim();
+                if (text.isEmpty) {
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    const SnackBar(
+                      content: Text('Division name cannot be empty.'),
+                    ),
+                  );
+                  return;
+                }
+                if (text == division.name) {
+                  // No change, just close
+                  Navigator.of(context).pop<String>(null);
+                  return;
+                }
+                Navigator.of(context).pop<String>(text);
+              },
+              style: ElevatedButton.styleFrom(
+                backgroundColor: widget.league.themeColor,
+                foregroundColor: Colors.white,
+              ),
+              child: const Text('Save'),
+            ),
+          ],
+        );
+      },
+    );
+
+    if (newName == null || newName.isEmpty) return;
+
+    // Update the division name
+    await widget.competitionRepository.updateDivisionName(division.id, newName);
+
+    // Refresh the divisions list
+    setState(() {
+      _futureDivisions = widget.competitionRepository
+          .getDivisionsForLeague(widget.league.id);
+    });
+
+    if (!mounted) return;
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text('Division renamed to "$newName"'),
+        backgroundColor: Colors.green,
+      ),
+    );
+  }
+
   // ---------- Tabs ----------
 
   Widget _buildDivisionsTab() {
@@ -365,91 +441,99 @@ class _DivisionsPageState extends State<DivisionsPage> {
 
             return Dismissible(
               key: Key(division.id),
-              direction: DismissDirection.startToEnd,
+              direction: DismissDirection.horizontal,
               confirmDismiss: (direction) async {
-                // Generate a random 6-digit code
-                final code = (100000 +
-                    (999999 - 100000) *
-                    (DateTime.now().millisecondsSinceEpoch % 1000) / 1000
-                ).toInt().toString();
+                // Swipe left = edit, swipe right = delete
+                if (direction == DismissDirection.endToStart) {
+                  // Edit division name
+                  await _showEditDivisionDialog(division);
+                  return false; // Don't dismiss, just show edit dialog
+                } else {
+                  // Delete division (swipe right)
+                  // Generate a random 6-digit code
+                  final code = (100000 +
+                      (999999 - 100000) *
+                      (DateTime.now().millisecondsSinceEpoch % 1000) / 1000
+                  ).toInt().toString();
 
-                final controller = TextEditingController();
+                  final controller = TextEditingController();
 
-                final confirmed = await showDialog<bool>(
-                  context: context,
-                  builder: (context) => AlertDialog(
-                    title: const Text('Delete Division'),
-                    content: Column(
-                      mainAxisSize: MainAxisSize.min,
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Text(
-                          'You are about to permanently delete "${division.name}".\n\n'
-                          'This will delete all events and data associated with this division.\n\n'
-                          'To confirm, please enter this code:',
-                        ),
-                        const SizedBox(height: 16),
-                        Container(
-                          padding: const EdgeInsets.all(12),
-                          decoration: BoxDecoration(
-                            color: widget.league.themeColor.withValues(alpha: 0.1),
-                            borderRadius: BorderRadius.circular(8),
-                            border: Border.all(color: widget.league.themeColor),
+                  final confirmed = await showDialog<bool>(
+                    context: context,
+                    builder: (context) => AlertDialog(
+                      title: const Text('Delete Division'),
+                      content: Column(
+                        mainAxisSize: MainAxisSize.min,
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(
+                            'You are about to permanently delete "${division.name}".\n\n'
+                            'This will delete all events and data associated with this division.\n\n'
+                            'To confirm, please enter this code:',
                           ),
-                          child: Text(
-                            code,
-                            style: const TextStyle(
-                              fontSize: 24,
-                              fontWeight: FontWeight.bold,
-                              letterSpacing: 4,
+                          const SizedBox(height: 16),
+                          Container(
+                            padding: const EdgeInsets.all(12),
+                            decoration: BoxDecoration(
+                              color: widget.league.themeColor.withValues(alpha: 0.1),
+                              borderRadius: BorderRadius.circular(8),
+                              border: Border.all(color: widget.league.themeColor),
+                            ),
+                            child: Text(
+                              code,
+                              style: const TextStyle(
+                                fontSize: 24,
+                                fontWeight: FontWeight.bold,
+                                letterSpacing: 4,
+                              ),
                             ),
                           ),
-                        ),
-                        const SizedBox(height: 16),
-                        TextField(
-                          controller: controller,
-                          keyboardType: TextInputType.number,
-                          maxLength: 6,
-                          inputFormatters: [
-                            FilteringTextInputFormatter.digitsOnly,
-                            LengthLimitingTextInputFormatter(6),
-                          ],
-                          decoration: const InputDecoration(
-                            labelText: 'Enter code',
-                            border: OutlineInputBorder(),
+                          const SizedBox(height: 16),
+                          TextField(
+                            controller: controller,
+                            keyboardType: TextInputType.number,
+                            maxLength: 6,
+                            inputFormatters: [
+                              FilteringTextInputFormatter.digitsOnly,
+                              LengthLimitingTextInputFormatter(6),
+                            ],
+                            decoration: const InputDecoration(
+                              labelText: 'Enter code',
+                              border: OutlineInputBorder(),
+                            ),
                           ),
+                        ],
+                      ),
+                      actions: [
+                        TextButton(
+                          onPressed: () => Navigator.of(context).pop(false),
+                          child: const Text('Cancel'),
+                        ),
+                        ElevatedButton(
+                          onPressed: () {
+                            if (controller.text == code) {
+                              Navigator.of(context).pop(true);
+                            } else {
+                              ScaffoldMessenger.of(context).showSnackBar(
+                                SnackBar(
+                                  content: const Text('Incorrect code. Please try again.'),
+                                  backgroundColor: widget.league.themeColor,
+                                ),
+                              );
+                            }
+                          },
+                          style: ElevatedButton.styleFrom(
+                            backgroundColor: widget.league.themeColor,
+                            foregroundColor: Colors.white,
+                          ),
+                          child: const Text('Delete'),
                         ),
                       ],
                     ),
-                    actions: [
-                      TextButton(
-                        onPressed: () => Navigator.of(context).pop(false),
-                        child: const Text('Cancel'),
-                      ),
-                      ElevatedButton(
-                        onPressed: () {
-                          if (controller.text == code) {
-                            Navigator.of(context).pop(true);
-                          } else {
-                            ScaffoldMessenger.of(context).showSnackBar(
-                              SnackBar(
-                                content: const Text('Incorrect code. Please try again.'),
-                                backgroundColor: widget.league.themeColor,
-                              ),
-                            );
-                          }
-                        },
-                        style: ElevatedButton.styleFrom(
-                          backgroundColor: widget.league.themeColor,
-                          foregroundColor: Colors.white,
-                        ),
-                        child: const Text('Delete'),
-                      ),
-                    ],
-                  ),
-                );
+                  );
 
-                return confirmed ?? false;
+                  return confirmed ?? false;
+                }
               },
               onDismissed: (direction) async {
                 await widget.competitionRepository.deleteDivision(division.id);
@@ -471,6 +555,16 @@ class _DivisionsPageState extends State<DivisionsPage> {
                 padding: const EdgeInsets.only(left: 20),
                 child: const Icon(
                   Icons.delete,
+                  color: Colors.white,
+                  size: 32,
+                ),
+              ),
+              secondaryBackground: Container(
+                color: Colors.blue,
+                alignment: Alignment.centerRight,
+                padding: const EdgeInsets.only(right: 20),
+                child: const Icon(
+                  Icons.edit,
                   color: Colors.white,
                   size: 32,
                 ),
